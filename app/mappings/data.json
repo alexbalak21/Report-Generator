@@ -16,7 +16,9 @@
 "full_line": {
   "operation": "format",
   "format": "{species} inspected on {date}"
+},
+  "report_number": {
+    "operation": "report_number"
+  }
 }
 
-
-}

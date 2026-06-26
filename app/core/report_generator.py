@@ -1,6 +1,7 @@
 import json
 import re
 import datetime
+import os
 from .excel_reader import ExcelReader
 from .word_processor import WordProcessor
 
@@ -10,6 +11,12 @@ class ReportGenerator:
         self.excel_path = excel_path
         self.template_path = template_path
         self.mapping_path = mapping_path
+
+        # Path to report_state.json
+        self.state_path = os.path.join(
+            os.path.dirname(mapping_path),
+            "report_state.json"
+        )
 
     @staticmethod
     def _normalize_header(value):
@@ -21,6 +28,20 @@ class ReportGenerator:
         """Load mapping.json from /mappings."""
         with open(self.mapping_path, "r", encoding="utf-8") as f:
             return json.load(f)
+
+    # ---------------------------------------------------------
+    # STATE MANAGEMENT (for report_number)
+    # ---------------------------------------------------------
+    def load_state(self):
+        if not os.path.exists(self.state_path):
+            return {"last_report_number": None}
+
+        with open(self.state_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    def save_state(self, state):
+        with open(self.state_path, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2)
 
     # ---------------------------------------------------------
     # COMPUTED FIELD ENGINE
@@ -58,6 +79,29 @@ class ReportGenerator:
             parts = rule.get("parts", [])
             return "".join(str(row_data.get(p, "")) for p in parts)
 
+        # ---- REPORT NUMBER ----
+        if operation == "report_number":
+            state = self.load_state()
+            last = state.get("last_report_number")
+
+            today = datetime.date.today()
+            prefix = today.strftime("%y%m%d")  # e.g. 260611
+
+            if last and last.startswith(prefix):
+                # extract last counter
+                last_counter = int(last.split("-")[1])
+                new_counter = last_counter + 1
+            else:
+                new_counter = 1
+
+            new_number = f"{prefix}-{new_counter:02d}"
+
+            # save new number
+            state["last_report_number"] = new_number
+            self.save_state(state)
+
+            return new_number
+
         # ---- DEFAULT ----
         return None
 
@@ -85,22 +129,17 @@ class ReportGenerator:
             if isinstance(rule, str):
                 normalized_key = self._normalize_header(key)
 
-                # skip if Excel column doesn't exist
                 if normalized_key not in excel_columns:
                     continue
-
-                # skip if row doesn't contain the column
                 if normalized_key not in row_data:
                     continue
 
-                # extract placeholder name inside {{ }}
                 match = re.search(r"\{\{(.*?)\}\}", rule)
                 if not match:
                     continue
 
                 placeholder_name = match.group(1).strip()
 
-                # skip if placeholder not in Word template
                 if placeholder_name not in available_placeholders:
                     continue
 
@@ -116,10 +155,7 @@ class ReportGenerator:
                 if value is None:
                     continue
 
-                # placeholder name = key
                 placeholder_name = key
-
-                # Word expects {{placeholder}}
                 placeholder_full = f"{{{{{placeholder_name}}}}}"
 
                 if placeholder_name not in available_placeholders:
