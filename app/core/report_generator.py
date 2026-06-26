@@ -1,4 +1,6 @@
 import json
+import re
+import datetime
 from .excel_reader import ExcelReader
 from .word_processor import WordProcessor
 
@@ -20,42 +22,115 @@ class ReportGenerator:
         with open(self.mapping_path, "r", encoding="utf-8") as f:
             return json.load(f)
 
-    def validate_mapping(self, excel, mapping):
-        """Ensure every mapping column exists in the Excel file and vice versa."""
-        excel_columns = {self._normalize_header(column) for column in excel.get_columns()}
-        mapping_columns = {self._normalize_header(column) for column in mapping.keys()}
+    # ---------------------------------------------------------
+    # COMPUTED FIELD ENGINE
+    # ---------------------------------------------------------
+    def compute_value(self, rule, row_data):
+        operation = rule.get("operation")
 
-        missing_from_excel = sorted(mapping_columns - excel_columns)
-        missing_from_mapping = sorted(excel_columns - mapping_columns)
+        # ---- TODAY ----
+        if operation == "today":
+            fmt = rule.get("format", "%Y-%m-%d")
+            return datetime.date.today().strftime(fmt)
 
-        if missing_from_excel or missing_from_mapping:
-            details = []
-            if missing_from_excel:
-                details.append(f"columns in mapping not found in Excel: {', '.join(missing_from_excel)}")
-            if missing_from_mapping:
-                details.append(f"columns in Excel not found in mapping: {', '.join(missing_from_mapping)}")
-            raise ValueError("Mapping mismatch: " + "; ".join(details))
+        # ---- UPPERCASE ----
+        if operation == "uppercase":
+            input_field = rule.get("input")
+            if input_field in row_data:
+                return str(row_data[input_field]).upper()
 
+        # ---- LOWERCASE ----
+        if operation == "lowercase":
+            input_field = rule.get("input")
+            if input_field in row_data:
+                return str(row_data[input_field]).lower()
+
+        # ---- FORMAT STRING ----
+        if operation == "format":
+            fmt = rule.get("format", "")
+            try:
+                return fmt.format(**row_data)
+            except Exception:
+                return ""
+
+        # ---- CONCAT ----
+        if operation == "concat":
+            parts = rule.get("parts", [])
+            return "".join(str(row_data.get(p, "")) for p in parts)
+
+        # ---- DEFAULT ----
+        return None
+
+    # ---------------------------------------------------------
+    # MAIN GENERATION LOGIC
+    # ---------------------------------------------------------
     def generate(self, row_number, output_path):
-        """
-        Generate a report using:
-        - Excel row
-        - Word template
-        - mapping.json
-        """
         excel = ExcelReader(self.excel_path)
         excel.load()
         row_data = excel.get_row_as_dict(row_number)
 
         mapping = self.load_mapping()
-        self.validate_mapping(excel, mapping)
-
-        filled = {
-            placeholder: row_data[self._normalize_header(column)]
-            for column, placeholder in mapping.items()
-        }
+        excel_columns = {self._normalize_header(column) for column in excel.get_columns()}
 
         word = WordProcessor(self.template_path)
+        available_placeholders = set(word.extract_placeholders())
+
+        filled = {}
+
+        for key, rule in mapping.items():
+
+            # -------------------------------------------------
+            # CASE 1: SIMPLE PLACEHOLDER (string)
+            # -------------------------------------------------
+            if isinstance(rule, str):
+                normalized_key = self._normalize_header(key)
+
+                # skip if Excel column doesn't exist
+                if normalized_key not in excel_columns:
+                    continue
+
+                # skip if row doesn't contain the column
+                if normalized_key not in row_data:
+                    continue
+
+                # extract placeholder name inside {{ }}
+                match = re.search(r"\{\{(.*?)\}\}", rule)
+                if not match:
+                    continue
+
+                placeholder_name = match.group(1).strip()
+
+                # skip if placeholder not in Word template
+                if placeholder_name not in available_placeholders:
+                    continue
+
+                filled[rule] = row_data[normalized_key]
+                continue
+
+            # -------------------------------------------------
+            # CASE 2: COMPUTED FIELD (dict)
+            # -------------------------------------------------
+            if isinstance(rule, dict):
+                value = self.compute_value(rule, row_data)
+
+                if value is None:
+                    continue
+
+                # placeholder name = key
+                placeholder_name = key
+
+                # Word expects {{placeholder}}
+                placeholder_full = f"{{{{{placeholder_name}}}}}"
+
+                if placeholder_name not in available_placeholders:
+                    continue
+
+                filled[placeholder_full] = value
+                continue
+
+        # ---------------------------------------------------------
+        # APPLY TO WORD TEMPLATE
+        # ---------------------------------------------------------
         word.fill_placeholders(filled, output_path)
 
         return output_path

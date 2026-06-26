@@ -3,5 +3,20 @@
   "species": "{{species}}",
   "address": "{{address}}",
   "inspector": "{{inspector}}",
-  "notes": "{{notes}}"
+  "notes": "{{notes}}",
+  "product" : "{{product}}",
+  "today_date": {
+  "operation": "today",
+  "format": "%d/%m/%Y"
+},
+"species_upper": {
+  "operation": "uppercase",
+  "input": "species"
+},
+"full_line": {
+  "operation": "format",
+  "format": "{species} inspected on {date}"
+}
+
+
 }
