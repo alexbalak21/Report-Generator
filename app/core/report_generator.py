@@ -1,9 +1,10 @@
-import json
-import re
-import datetime
 import os
+import re
 from .excel_reader import ExcelReader
 from .word_processor import WordProcessor
+from .mapping_loader import MappingLoader
+from .state_manager import ReportStateManager
+from . import processors
 
 
 class ReportGenerator:
@@ -12,11 +13,20 @@ class ReportGenerator:
         self.template_path = template_path
         self.mapping_path = mapping_path
 
-        # Path to report_state.json
-        self.state_path = os.path.join(
-            os.path.dirname(mapping_path),
-            "report_state.json"
+        self.mapping_loader = MappingLoader(mapping_path)
+        self.state_manager = ReportStateManager(
+            os.path.join(os.path.dirname(mapping_path), "report_state.json")
         )
+
+        # Map operation names → functions
+        self.operations = {
+            "today": processors.op_today,
+            "uppercase": processors.op_uppercase,
+            "lowercase": processors.op_lowercase,
+            "format": processors.op_format,
+            "concat": processors.op_concat,
+            "report_number": lambda rule, row: self.state_manager.generate_report_number()
+        }
 
     @staticmethod
     def _normalize_header(value):
@@ -24,97 +34,22 @@ class ReportGenerator:
             return ""
         return str(value).strip()
 
-    def load_mapping(self):
-        """Load mapping.json from /mappings."""
-        with open(self.mapping_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-    # ---------------------------------------------------------
-    # STATE MANAGEMENT (for report_number)
-    # ---------------------------------------------------------
-    def load_state(self):
-        if not os.path.exists(self.state_path):
-            return {"last_report_number": None}
-
-        with open(self.state_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-    def save_state(self, state):
-        with open(self.state_path, "w", encoding="utf-8") as f:
-            json.dump(state, f, indent=2)
-
-    # ---------------------------------------------------------
-    # COMPUTED FIELD ENGINE
-    # ---------------------------------------------------------
     def compute_value(self, rule, row_data):
         operation = rule.get("operation")
+        func = self.operations.get(operation)
 
-        # ---- TODAY ----
-        if operation == "today":
-            fmt = rule.get("format", "%Y-%m-%d")
-            return datetime.date.today().strftime(fmt)
+        if func:
+            return func(rule, row_data)
 
-        # ---- UPPERCASE ----
-        if operation == "uppercase":
-            input_field = rule.get("input")
-            if input_field in row_data:
-                return str(row_data[input_field]).upper()
-
-        # ---- LOWERCASE ----
-        if operation == "lowercase":
-            input_field = rule.get("input")
-            if input_field in row_data:
-                return str(row_data[input_field]).lower()
-
-        # ---- FORMAT STRING ----
-        if operation == "format":
-            fmt = rule.get("format", "")
-            try:
-                return fmt.format(**row_data)
-            except Exception:
-                return ""
-
-        # ---- CONCAT ----
-        if operation == "concat":
-            parts = rule.get("parts", [])
-            return "".join(str(row_data.get(p, "")) for p in parts)
-
-        # ---- REPORT NUMBER ----
-        if operation == "report_number":
-            state = self.load_state()
-            last = state.get("last_report_number")
-
-            today = datetime.date.today()
-            prefix = today.strftime("%y%m%d")  # e.g. 260611
-
-            if last and last.startswith(prefix):
-                # extract last counter
-                last_counter = int(last.split("-")[1])
-                new_counter = last_counter + 1
-            else:
-                new_counter = 1
-
-            new_number = f"{prefix}-{new_counter:02d}"
-
-            # save new number
-            state["last_report_number"] = new_number
-            self.save_state(state)
-
-            return new_number
-
-        # ---- DEFAULT ----
         return None
 
-    # ---------------------------------------------------------
-    # MAIN GENERATION LOGIC
-    # ---------------------------------------------------------
     def generate(self, row_number, output_path):
         excel = ExcelReader(self.excel_path)
         excel.load()
         row_data = excel.get_row_as_dict(row_number)
 
-        mapping = self.load_mapping()
-        excel_columns = {self._normalize_header(column) for column in excel.get_columns()}
+        mapping = self.mapping_loader.load()
+        excel_columns = {self._normalize_header(c) for c in excel.get_columns()}
 
         word = WordProcessor(self.template_path)
         available_placeholders = set(word.extract_placeholders())
@@ -123,9 +58,7 @@ class ReportGenerator:
 
         for key, rule in mapping.items():
 
-            # -------------------------------------------------
-            # CASE 1: SIMPLE PLACEHOLDER (string)
-            # -------------------------------------------------
+            # SIMPLE PLACEHOLDER
             if isinstance(rule, str):
                 normalized_key = self._normalize_header(key)
 
@@ -146,27 +79,18 @@ class ReportGenerator:
                 filled[rule] = row_data[normalized_key]
                 continue
 
-            # -------------------------------------------------
-            # CASE 2: COMPUTED FIELD (dict)
-            # -------------------------------------------------
+            # COMPUTED FIELD
             if isinstance(rule, dict):
                 value = self.compute_value(rule, row_data)
-
                 if value is None:
                     continue
 
-                placeholder_name = key
-                placeholder_full = f"{{{{{placeholder_name}}}}}"
+                placeholder_full = f"{{{{{key}}}}}"
 
-                if placeholder_name not in available_placeholders:
+                if key not in available_placeholders:
                     continue
 
                 filled[placeholder_full] = value
-                continue
 
-        # ---------------------------------------------------------
-        # APPLY TO WORD TEMPLATE
-        # ---------------------------------------------------------
         word.fill_placeholders(filled, output_path)
-
         return output_path
