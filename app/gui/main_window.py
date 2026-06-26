@@ -1,7 +1,11 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox, simpledialog
 
 from .file_dialogs import select_excel_file, select_docx_template
+
+from app.core.excel_reader import ExcelReader
+from app.core.report_generator import ReportGenerator
+import os
 
 
 class MainWindow(tk.Tk):
@@ -9,34 +13,38 @@ class MainWindow(tk.Tk):
         super().__init__()
 
         self.title("Report Generator")
-        self.geometry("500x250")
+        self.geometry("550x350")
         self.resizable(False, False)
 
         # Store selected paths
         self.excel_path = tk.StringVar()
         self.template_path = tk.StringVar()
+        self.selected_row = tk.StringVar()
 
-        # UI
         self.create_widgets()
 
     def create_widgets(self):
-        # Title
         title = ttk.Label(self, text="Simple Report Generator", font=("Arial", 16))
         title.pack(pady=10)
 
-        # Select Excel button
-        btn_excel = ttk.Button(self, text="Select data .xlsx", command=self.on_select_excel)
-        btn_excel.pack(pady=5)
+        # Excel selection
+        ttk.Button(self, text="Select data .xlsx", command=self.on_select_excel).pack(pady=5)
+        ttk.Label(self, textvariable=self.excel_path, foreground="blue").pack()
 
-        lbl_excel = ttk.Label(self, textvariable=self.excel_path, foreground="blue")
-        lbl_excel.pack()
+        # Template selection
+        ttk.Button(self, text="Select template .docx", command=self.on_select_template).pack(pady=5)
+        ttk.Label(self, textvariable=self.template_path, foreground="blue").pack()
 
-        # Select Template button
-        btn_template = ttk.Button(self, text="Select template .docx", command=self.on_select_template)
-        btn_template.pack(pady=5)
+        # Row selection
+        ttk.Button(self, text="Select line (row)", command=self.on_select_row).pack(pady=10)
+        ttk.Label(self, textvariable=self.selected_row, foreground="green").pack()
 
-        lbl_template = ttk.Label(self, textvariable=self.template_path, foreground="blue")
-        lbl_template.pack()
+        # Generate report
+        ttk.Button(self, text="Generate report", command=self.on_generate_report).pack(pady=20)
+
+    # -----------------------------
+    # Button callbacks
+    # -----------------------------
 
     def on_select_excel(self):
         path = select_excel_file()
@@ -47,6 +55,43 @@ class MainWindow(tk.Tk):
         path = select_docx_template()
         if path:
             self.template_path.set(path)
+
+    def on_select_row(self):
+        if not self.excel_path.get():
+            messagebox.showerror("Error", "Select an Excel file first")
+            return
+
+        # Ask user for row number
+        row = simpledialog.askinteger("Select row", "Enter Excel row number (starting at 2):")
+
+        if row and row >= 2:
+            self.selected_row.set(f"Selected row: {row}")
+        else:
+            messagebox.showerror("Error", "Invalid row number")
+
+    def on_generate_report(self):
+        if not self.excel_path.get() or not self.template_path.get():
+            messagebox.showerror("Error", "Select Excel and Template first")
+            return
+
+        if not self.selected_row.get():
+            messagebox.showerror("Error", "Select a row first")
+            return
+
+        row_number = int(self.selected_row.get().split(":")[1].strip())
+
+        # Output file
+        output_path = os.path.join(os.getcwd(), f"report_row_{row_number}.docx")
+
+        generator = ReportGenerator(
+            excel_path=self.excel_path.get(),
+            template_path=self.template_path.get(),
+            mapping_path="mappings/data.json"
+        )
+
+        generator.generate(row_number=row_number, output_path=output_path)
+
+        messagebox.showinfo("Success", f"Report generated:\n{output_path}")
 
 
 if __name__ == "__main__":
