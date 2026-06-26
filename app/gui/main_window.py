@@ -1,11 +1,9 @@
+import os
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
-from .file_dialogs import select_excel_file, select_docx_template
-
-from app.core.excel_reader import ExcelReader
 from app.core.report_generator import ReportGenerator
-import os
+from app.gui.file_dialogs import select_excel_file, select_docx_template
 
 
 class MainWindow(tk.Tk):
@@ -83,10 +81,12 @@ class MainWindow(tk.Tk):
         # Output file
         output_path = os.path.join(os.getcwd(), f"report_row_{row_number}.docx")
 
+        mapping_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "mappings", "data.json"))
+
         generator = ReportGenerator(
             excel_path=self.excel_path.get(),
             template_path=self.template_path.get(),
-            mapping_path="mappings/data.json"
+            mapping_path=mapping_path
         )
 
         generator.generate(row_number=row_number, output_path=output_path)
