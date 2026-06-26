@@ -1,12 +1,54 @@
-# I want to be able to store the generated data from generated reports in a database for future reference. This will allow me to keep track of all the reports that have been generated, along with their associated data and metadata. By storing this information in a structured format, I can easily query and analyze the data later on, which will be useful for auditing purposes and for generating insights from the report data.
+import sqlite3
+import json
+import os
 
-#   """
-#             CREATE TABLE IF NOT EXISTS reports (
-#                 id TEXT PRIMARY KEY,              -- report_number
-#                 created_at TEXT NOT NULL,
-#                 excel_path TEXT NOT NULL,
-#                 template_path TEXT NOT NULL,
-#                 row_number INTEGER NOT NULL,
-#                 data_json TEXT NOT NULL
-#             )
-#             """
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "app_data.db")
+
+
+def _get_connection():
+    conn = sqlite3.connect(os.path.abspath(DB_PATH))
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS reports (
+            id            TEXT PRIMARY KEY,
+            created_at    TEXT NOT NULL,
+            excel_path    TEXT NOT NULL,
+            template_path TEXT NOT NULL,
+            mapping_path  TEXT NOT NULL,
+            row_number    INTEGER NOT NULL,
+            data_json     TEXT NOT NULL
+        )
+    """)
+    conn.commit()
+    return conn
+
+
+def save_report(report_id: str, created_at: str, excel_path: str,
+                template_path: str, mapping_path: str,
+                row_number: int, data: dict) -> None:
+    with _get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO reports
+                (id, created_at, excel_path, template_path, mapping_path, row_number, data_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (report_id, created_at, excel_path, template_path, mapping_path,
+             row_number, json.dumps(data, ensure_ascii=False)),
+        )
+        conn.commit()
+
+
+def list_reports() -> list[dict]:
+    with _get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, created_at, excel_path, template_path, mapping_path, row_number "
+            "FROM reports ORDER BY created_at DESC"
+        ).fetchall()
+        return [
+            {
+                "id": r[0], "created_at": r[1], "excel_path": r[2],
+                "template_path": r[3], "mapping_path": r[4], "row_number": r[5],
+            }
+            for r in rows
+        ]
