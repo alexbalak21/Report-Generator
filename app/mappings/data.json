@@ -1,8 +1,8 @@
 {
   "config": {
-    "data_file": "S:/Documents/Rapport_Generation/table.xlsx",
-    "template_file": "S:/Documents/Rapport_Generation/template.docx",
-    "output_dir": "S:/Documents/Rapport_Generation/Output"
+    "data_file": "C:/repport gen/table.xlsx",
+    "template_file": "C:/repport gen/template.docx",
+    "output_dir": "C:\\repport gen\\out"
   },
   "date": "{{date}}",
   "species": "{{species}}",

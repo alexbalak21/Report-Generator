@@ -4,20 +4,22 @@ Handles saving and restoring GUI state (paths, line number) via SQLite.
 from app.core.mapping_loader import MappingLoader
 from app.repository.config_repository import config_get, config_set
 
-KEY_EXCEL   = "last_excel_path"
-KEY_DOCX    = "last_docx_path"
-KEY_MAPPING = "last_mapping_path"
-KEY_LINE    = "last_line_number"
+KEY_EXCEL      = "last_excel_path"
+KEY_DOCX       = "last_docx_path"
+KEY_MAPPING    = "last_mapping_path"
+KEY_LINE       = "last_line_number"
+KEY_OUTPUT_DIR = "last_output_dir"
 
 
 def restore_config() -> dict:
     """
     Load last-used state from SQLite.
-    Returns a dict with keys: excel, docx, mapping, line, mapping_cfg.
+    Returns a dict with keys: excel, docx, mapping, line, output_dir, mapping_cfg.
     """
-    excel   = config_get(KEY_EXCEL) or ""
-    docx    = config_get(KEY_DOCX) or ""
-    mapping = config_get(KEY_MAPPING) or ""
+    excel      = config_get(KEY_EXCEL) or ""
+    docx       = config_get(KEY_DOCX) or ""
+    mapping    = config_get(KEY_MAPPING) or ""
+    output_dir = config_get(KEY_OUTPUT_DIR) or ""
 
     last_line = config_get(KEY_LINE)
     line = (int(last_line) + 1) if (last_line and last_line.isdigit()) else 2
@@ -29,6 +31,7 @@ def restore_config() -> dict:
         "docx":        docx,
         "mapping":     mapping,
         "line":        line,
+        "output_dir":  output_dir,
         "mapping_cfg": mapping_cfg,
     }
 
@@ -44,6 +47,11 @@ def save_config(excel: str, docx: str, mapping: str, line: int) -> None:
 def save_mapping_path(path: str) -> None:
     """Persist mapping path immediately when the user selects one."""
     config_set(KEY_MAPPING, path)
+
+
+def save_output_dir(directory: str) -> None:
+    """Persist the output directory chosen in the Save As dialog."""
+    config_set(KEY_OUTPUT_DIR, directory)
 
 
 def load_mapping_config(mapping_path: str) -> dict:

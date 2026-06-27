@@ -7,12 +7,15 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from app.core.mapping_loader import MappingLoader
-from app.gui.file_dialogs import select_excel_file, select_docx_template, select_mapping_file
+from app.gui.file_dialogs import (
+    select_excel_file, select_docx_template,
+    select_mapping_file, select_output_file,
+)
 from app.gui.line_selector import LineSelector
 from app.gui.config_persistence import (
-    restore_config, save_config, save_mapping_path, load_mapping_config,
+    restore_config, save_config, save_mapping_path, load_mapping_config, save_output_dir,
 )
-from app.gui.report_actions import generate_report
+from app.gui.report_actions import resolve_output_path, generate_report
 
 DEFAULT_MAPPING = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "mappings", "data.json")
@@ -42,9 +45,9 @@ class MainWindow(tk.Tk):
     def _build_ui(self):
         ttk.Label(self, text="Report Generator", font=("Arial", 16, "bold")).pack(pady=(14, 8))
 
-        self._path_row("Mapping (.json)",    "Select…", self.on_select_mapping,  self.mapping_path)
-        self._path_row("Data file (.xlsx)",  "Select…", self.on_select_excel,    self.excel_path)
-        self._path_row("Template (.docx)",   "Select…", self.on_select_template, self.template_path)
+        self._path_row("Mapping (.json)",   "Select…", self.on_select_mapping,  self.mapping_path)
+        self._path_row("Data file (.xlsx)", "Select…", self.on_select_excel,    self.excel_path)
+        self._path_row("Template (.docx)",  "Select…", self.on_select_template, self.template_path)
 
         ttk.Separator(self, orient="horizontal").pack(fill="x", padx=14, pady=10)
 
@@ -58,7 +61,6 @@ class MainWindow(tk.Tk):
         ).pack(pady=(4, 16), ipadx=20, ipady=6)
 
     def _path_row(self, label: str, btn_text: str, cmd, var: tk.StringVar):
-        """One row: label | button | path display."""
         frame = ttk.Frame(self)
         frame.pack(fill="x", padx=14, pady=3)
         ttk.Label(frame, text=label, width=18, anchor="w").pack(side="left")
@@ -74,12 +76,10 @@ class MainWindow(tk.Tk):
         state = restore_config()
         self.line_number.set(state["line"])
 
-        # Mapping first — its config block auto-fills excel and template
         mapping = state["mapping"] or DEFAULT_MAPPING
         self.mapping_path.set(mapping)
         self._apply_mapping_config(mapping)
 
-        # Manual overrides (if the user had picked different files after the mapping)
         if state["excel"]:
             self.excel_path.set(state["excel"])
         if state["docx"]:
@@ -109,7 +109,6 @@ class MainWindow(tk.Tk):
             self._apply_mapping_config(path)
 
     def _apply_mapping_config(self, mapping_path: str):
-        """Auto-fill Excel and template fields from the mapping's config block."""
         cfg = load_mapping_config(mapping_path)
         if cfg.get("data_file"):
             self.excel_path.set(cfg["data_file"])
@@ -117,7 +116,6 @@ class MainWindow(tk.Tk):
             self.template_path.set(cfg["template_file"])
 
     def _update_mapping_config(self, **kwargs):
-        """Write changed paths back into the active mapping JSON."""
         mapping = self.mapping_path.get()
         if not mapping:
             return
@@ -142,8 +140,26 @@ class MainWindow(tk.Tk):
             messagebox.showerror("Invalid line", "Row number must be ≥ 2 (row 1 is the header).")
             return
 
+        # Pre-compute the suggested path from mapping config + file_name field
+        suggested_dir, suggested_name = resolve_output_path(mapping, excel, docx, line)
+
+        # Ask the user to confirm or change the save location
+        output_path = select_output_file(
+            initial_dir=suggested_dir,
+            initial_file=suggested_name,
+        )
+        if not output_path:
+            return  # user cancelled
+
+        # If the user changed the output folder, persist it to JSON + SQLite
+        chosen_dir = os.path.dirname(os.path.abspath(output_path))
+        if chosen_dir != os.path.abspath(suggested_dir):
+            self._update_mapping_config(output_dir=chosen_dir)
+            save_output_dir(chosen_dir)
+
         try:
-            output_path = generate_report(excel, docx, mapping, row_number=line)
+            final_path = generate_report(excel, docx, mapping, row_number=line,
+                                         output_path=output_path)
         except Exception as exc:
             messagebox.showerror("Generation error", str(exc))
             return
@@ -151,7 +167,7 @@ class MainWindow(tk.Tk):
         save_config(excel, docx, mapping, line)
         self.line_number.set(line + 1)
 
-        messagebox.showinfo("Done", f"Report generated:\n{output_path}")
+        messagebox.showinfo("Done", f"Report generated:\n{final_path}")
 
 
 if __name__ == "__main__":

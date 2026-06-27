@@ -1,13 +1,14 @@
 import sqlite3
 import json
 import os
-
+import datetime
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "app_data.db")
 
 
 def _get_connection():
     conn = sqlite3.connect(os.path.abspath(DB_PATH))
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS reports (
             id            TEXT PRIMARY KEY,
@@ -19,9 +20,19 @@ def _get_connection():
             data_json     TEXT NOT NULL
         )
     """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS report_state (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """)
+
     conn.commit()
     return conn
 
+
+# ── Report log ────────────────────────────────────────────────────────────────
 
 def save_report(report_id: str, created_at: str, excel_path: str,
                 template_path: str, mapping_path: str,
@@ -52,3 +63,23 @@ def list_reports() -> list[dict]:
             }
             for r in rows
         ]
+
+
+# ── Report state (replaces report_state.json) ─────────────────────────────────
+
+def get_last_report_number() -> str | None:
+    with _get_connection() as conn:
+        row = conn.execute(
+            "SELECT value FROM report_state WHERE key = 'last_report_number'"
+        ).fetchone()
+        return row[0] if row else None
+
+
+def set_last_report_number(value: str) -> None:
+    with _get_connection() as conn:
+        conn.execute(
+            "INSERT INTO report_state (key, value) VALUES ('last_report_number', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (value,),
+        )
+        conn.commit()

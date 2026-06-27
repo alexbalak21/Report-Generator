@@ -116,24 +116,8 @@ class ReportGenerator:
                 continue
             filled[placeholder_full] = str(value)
 
-        # ── Pass 3: resolve file_name with all computed values known ──
-        file_name_rule = mapping.get("file_name")
-        resolved_file_name = None
-        if isinstance(file_name_rule, dict):
-            enriched_row = {**row_data, **computed_values}
-            raw_name = self.compute_value(file_name_rule, enriched_row)
-            if raw_name:
-                resolved_file_name = self._sanitize_filename(raw_name)
-
         # ── Write output ──────────────────────────────────────────────
-        cfg = self.mapping_loader.load_config()
-        output_dir = cfg.get("output_dir") or os.path.dirname(output_path)
-        os.makedirs(output_dir, exist_ok=True)
-
-        if resolved_file_name:
-            final_output = os.path.join(output_dir, resolved_file_name)
-        else:
-            final_output = os.path.join(output_dir, os.path.basename(output_path))
-
-        word.fill_placeholders(filled, final_output)
-        return final_output
+        # output_path is the explicit path chosen by the user via Save As dialog
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+        word.fill_placeholders(filled, output_path)
+        return output_path
