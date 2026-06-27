@@ -1,3 +1,42 @@
-env
-.venv
-__pycache__
+# ── Virtual environments ───────────────────────────────────────────────────────
+env/
+.venv/
+venv/
+
+# ── Python cache ───────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ── Distribution / packaging ───────────────────────────────────────────────────
+dist/
+build/
+*.egg-info/
+*.egg
+
+# ── SQLite database ────────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Generated reports ──────────────────────────────────────────────────────────
+report_row_*.docx
+
+# ── Report state (auto-managed, not for version control) ──────────────────────
+app/mappings/report_state.json
+
+# ── OS files ───────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE / editor ───────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.user
+
+# ── pytest ─────────────────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
