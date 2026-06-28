@@ -35,13 +35,14 @@ class MainWindow(tk.Tk):
         super().__init__()
 
         self.title("Report Generator")
-        self.geometry("620x500")
+        self.geometry("620x540")
         self.resizable(False, False)
 
         self.excel_path    = tk.StringVar()
         self.template_path = tk.StringVar()
         self.mapping_path  = tk.StringVar()
         self.output_dir    = tk.StringVar()
+        self.report_name   = tk.StringVar()
         self.line_number   = tk.IntVar(value=2)
 
         # Report counter — editable by the user
@@ -62,6 +63,7 @@ class MainWindow(tk.Tk):
         self._path_row("Data file (.xlsx)", "Select…", self.on_select_excel,    self.excel_path)
         self._path_row("Template (.docx)",  "Select…", self.on_select_template, self.template_path)
         self._output_row()
+        self._report_name_row()
 
         ttk.Separator(self, orient="horizontal").pack(fill="x", padx=14, pady=10)
 
@@ -120,6 +122,24 @@ class MainWindow(tk.Tk):
         # Update preview whenever counter changes
         self.report_counter.trace_add("write", lambda *_: self._update_preview())
 
+    def _report_name_row(self):
+        frame = ttk.Frame(self)
+        frame.pack(fill="x", padx=14, pady=3)
+        ttk.Label(frame, text="Name of the report:", width=18, anchor="w").pack(side="left")
+        entry = ttk.Entry(frame, textvariable=self.report_name, width=30)
+        entry.pack(side="left", padx=(0, 8))
+        ttk.Label(
+            frame, text="(prefix used in report number)",
+            foreground="#888888", font=("Arial", 9),
+        ).pack(side="left")
+        # Persist to mapping config whenever the user edits the field
+        self.report_name.trace_add("write", self._on_report_name_changed)
+
+    def _on_report_name_changed(self, *_):
+        name = self.report_name.get()
+        self._update_mapping_config(report_prefix=name)
+        self._update_preview()
+
     @staticmethod
     def _validate_counter(value: str) -> bool:
         return value == "" or (value.isdigit() and int(value) >= 0)
@@ -128,7 +148,10 @@ class MainWindow(tk.Tk):
         try:
             prefix = self._state_mgr.get_today_prefix()
             next_n = self.report_counter.get() + 1
-            self._preview_label.config(text=f"Next report number: {prefix}-{next_n:02d}")
+            name   = self.report_name.get().strip()
+            number = f"{prefix}-{next_n:02d}"
+            display = f"{name} {number}".strip() if name else number
+            self._preview_label.config(text=f"Next report number: {display}")
         except Exception:
             pass
 
@@ -150,6 +173,11 @@ class MainWindow(tk.Tk):
             self.template_path.set(state["docx"])
         if state.get("output_dir"):
             self.output_dir.set(state["output_dir"])
+
+        # Restore report name (prefix) from mapping config
+        report_prefix = state.get("mapping_cfg", {}).get("report_prefix", "")
+        if report_prefix:
+            self.report_name.set(report_prefix)
 
         # Refresh counter from DB in case another session changed it
         self.report_counter.set(self._state_mgr.get_current_counter())
@@ -204,6 +232,8 @@ class MainWindow(tk.Tk):
             self.template_path.set(cfg["template_file"])
         if cfg.get("output_dir"):
             self.output_dir.set(cfg["output_dir"])
+        if cfg.get("report_prefix"):
+            self.report_name.set(cfg["report_prefix"])
 
     def _update_mapping_config(self, **kwargs):
         mapping = self.mapping_path.get()
