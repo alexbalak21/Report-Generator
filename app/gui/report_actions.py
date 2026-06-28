@@ -42,11 +42,13 @@ def resolve_output_path(mapping_path: str, excel_path: str,
                 for k, v in raw_row.items()
             }
 
+            report_prefix = cfg.get("report_prefix", "")
+
             # Build the full operations map (needed for compute_value)
-            operations = gen._build_operations(excel)
+            operations = gen._build_operations(excel, report_prefix)
 
             # Resolve all computed fields except file_name
-            computed = {}
+            computed = {"report_prefix": report_prefix}
             for key, rule in rules.items():
                 if not isinstance(rule, dict) or key == "file_name":
                     continue

@@ -1,0 +1,53 @@
+{
+  "config": {
+    "data_file": "C:/repport_gen/rapport_data.xlsx",
+    "template_file": "C:/repport_gen/rapport_template.docx",
+    "output_dir": "C:\\repport_gen\\out",
+    "date_format": "%d/%m/%Y",
+    "report_prefix": "NOVOCIB"
+  },
+  "date rapport": "{{date_rapport}}",
+  "appellation produit": "{{appellation_produit}}",
+  "nom entreprise client": "{{nom_entreprise_client}}",
+  "adresse entreprise client": "{{adresse_entreprise_client}}",
+  "nom destinataire": "{{nom_destinataire}}",
+  "titre poste destinataire": "{{titre_poste_destinataire}}",
+  "Lieu de prelevment": "{{Lieu_de_prelevment}}",
+  "date heure prelevment": "{{date_heure_prelevment}}",
+  "adresse prelevement": "{{adresse_prelevement}}",
+  "ville prelevement": "{{ville_prelevement}}",
+  "conditions coservation reception": "{{conditions_coservation_reception}}",
+  "date heure arrive labo": "{{date_heure_arrive_labo}}",
+  "temperature reception": "{{temperature_reception}}",
+  "date heure mise en analyse": "{{date_heure_mise_en_analyse}}",
+  "fournisseur fabricant": "{{fournisseur_fabricant}}",
+  "nom produit": "{{nom_produit}}",
+  "conditionnement": "{{conditionnement}}",
+  "espece": "{{espece}}",
+  "agrement": "{{agrement}}",
+  "origine": "{{origine}}",
+  "lot": "{{lot}}",
+  "date emabalage": "{{date_emabalage}}",
+  "code article": "{{code_article}}",
+  "dlc": "{{dlc}}",
+  "lot precice": "{{lot_precice}}",
+  "imp": "{{imp}}",
+  "k value": "{{k_value}}",
+  "conformite": "{{conformite}}",
+  "qualite": "{{qualite}}",
+  "date_du_jour": {
+    "operation": "today",
+    "format": "%d/%m/%Y"
+  },
+  "report_number": {
+    "operation": "report_number"
+  },
+  "numero_rapport": {
+    "operation": "format",
+    "format": "{report_prefix} {report_number}"
+  },
+  "file_name": {
+    "operation": "format",
+    "format": "{numero_rapport}_{date_du_jour}.docx"
+  }
+}

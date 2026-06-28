@@ -1,5 +1,7 @@
 import os
 import re
+import openpyxl
+
 from .excel_reader import ExcelReader
 from .word_processor import WordProcessor
 from .mapping_loader import MappingLoader
@@ -11,6 +13,9 @@ _ILLEGAL_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 # Fallback date format when none is specified in mapping config
 DEFAULT_DATE_FORMAT = "%d/%m/%Y"
+
+# Column written back to Excel after generation
+RAPPORT_GENERE_COLUMN = "rapport generé"
 
 
 class ReportGenerator:
@@ -42,10 +47,6 @@ class ReportGenerator:
 
     @staticmethod
     def _normalize_field_value(value, date_format: str = DEFAULT_DATE_FORMAT) -> str:
-        """
-        Convert an Excel cell value to a display string.
-        Dates are formatted using date_format (from mapping config.date_format).
-        """
         import datetime as dt
         if isinstance(value, (dt.datetime, dt.date)):
             return value.strftime(date_format)
@@ -53,8 +54,8 @@ class ReportGenerator:
             return ""
         return str(value).strip()
 
-    def _build_operations(self, excel_reader: ExcelReader) -> dict:
-        """Build the operations map, injecting excel_reader into lookup ops."""
+    def _build_operations(self, excel_reader: ExcelReader, report_prefix: str = "") -> dict:
+        """Build the operations map, injecting excel_reader and report_prefix."""
         return {
             "today":         processors.op_today,
             "uppercase":     processors.op_uppercase,
@@ -62,6 +63,7 @@ class ReportGenerator:
             "format":        processors.op_format,
             "concat":        processors.op_concat,
             "report_number": lambda rule, row: self.state_manager.generate_report_number(),
+            "report_prefix": lambda rule, row: report_prefix,
             "lookup":        lambda rule, row: processors.op_lookup(rule, row, excel_reader),
             "lookup_join":   lambda rule, row: processors.op_lookup_join(rule, row, excel_reader),
         }
@@ -72,34 +74,71 @@ class ReportGenerator:
         return func(rule, row_data) if func else None
 
     # ------------------------------------------------------------------
+    # Write-back: stamp "rapport generé" column in Excel
+    # ------------------------------------------------------------------
+
+    def _write_rapport_genere(self, row_number: int, report_num: str) -> None:
+        """
+        Open the Excel file and write report_num into the 'rapport generé'
+        column of the given row. Creates the column header if absent.
+        row_number is 1-based Excel row (row 1 = header, data starts at 2).
+        """
+        try:
+            wb = openpyxl.load_workbook(self.excel_path)
+            ws = wb.active
+
+            # Find or create the "rapport generé" column
+            headers = [
+                self._normalize_header(ws.cell(row=1, column=c).value)
+                for c in range(1, ws.max_column + 1)
+            ]
+
+            if RAPPORT_GENERE_COLUMN in headers:
+                col_idx = headers.index(RAPPORT_GENERE_COLUMN) + 1  # 1-based
+            else:
+                # Append at the end
+                col_idx = ws.max_column + 1
+                ws.cell(row=1, column=col_idx, value=RAPPORT_GENERE_COLUMN)
+
+            ws.cell(row=row_number, column=col_idx, value=report_num)
+            wb.save(self.excel_path)
+        except Exception as exc:
+            # Non-fatal — log but don't crash the generation
+            print(f"[warn] Could not write back to Excel: {exc}")
+
+    # ------------------------------------------------------------------
     # Main entry point
     # ------------------------------------------------------------------
 
     def generate(self, row_number: int, output_path: str) -> str:
-        # ── Load Excel (all sheets) ───────────────────────────────────
+        # ── Load Excel ────────────────────────────────────────────────
         excel = ExcelReader(self.excel_path)
         excel.load()
         raw_row = excel.get_row_as_dict(row_number)
 
-        # Read date_format from mapping config (fallback: dd/mm/yyyy)
-        cfg         = self.mapping_loader.load_config()
-        date_format = cfg.get("date_format", DEFAULT_DATE_FORMAT)
+        # Read config
+        cfg           = self.mapping_loader.load_config()
+        date_format   = cfg.get("date_format", DEFAULT_DATE_FORMAT)
+        report_prefix = cfg.get("report_prefix", "")
 
-        # Normalize all values — dates use the configured format
+        # Normalize all values
         row_data = {
             k: self._normalize_field_value(v, date_format)
             for k, v in raw_row.items()
         }
 
-        operations            = self._build_operations(excel)
-        mapping               = self.mapping_loader.load()
-        excel_columns         = {self._normalize_header(c) for c in excel.get_columns()}
+        operations             = self._build_operations(excel, report_prefix)
+        mapping                = self.mapping_loader.load()
+        excel_columns          = {self._normalize_header(c) for c in excel.get_columns()}
 
-        word                  = WordProcessor(self.template_path)
+        word                   = WordProcessor(self.template_path)
         available_placeholders = set(word.extract_placeholders())
 
         filled:          dict[str, str] = {}
         computed_values: dict[str, str] = {}
+
+        # Inject report_prefix into computed values so format strings can use {report_prefix}
+        computed_values["report_prefix"] = report_prefix
 
         # ── Pass 1: simple column mappings ────────────────────────────
         for key, rule in mapping.items():
@@ -121,7 +160,6 @@ class ReportGenerator:
             computed_values[key] = value
 
         # ── Pass 2: computed fields (excluding file_name) ─────────────
-        # Loops until stable to support dependency chains (lookup → format, etc.)
         max_passes = len(mapping) + 1
         for _ in range(max_passes):
             resolved_any = False
@@ -131,7 +169,7 @@ class ReportGenerator:
                 if key == "file_name":
                     continue
                 if key in computed_values:
-                    continue  # already resolved
+                    continue
 
                 enriched = {**row_data, **computed_values}
                 try:
@@ -152,18 +190,29 @@ class ReportGenerator:
             if not resolved_any:
                 break
 
-        # ── Pass 3: file_name (resolved last so it can use report_number) ──
-        file_name_rule    = mapping.get("file_name")
+        # ── Pass 3: file_name ─────────────────────────────────────────
+        file_name_rule = mapping.get("file_name")
         if isinstance(file_name_rule, dict):
             enriched = {**row_data, **computed_values}
             try:
                 raw_name = self.compute_value(file_name_rule, enriched, operations)
                 if raw_name:
-                    self._sanitize_filename(raw_name)  # validates only, path set by caller
+                    self._sanitize_filename(raw_name)
             except Exception:
                 pass
 
-        # ── Write output ──────────────────────────────────────────────
+        # ── Write Word output ─────────────────────────────────────────
+        # Alias: if template uses {{numéro_rapport}} (accented), fill it too
+        num_val = computed_values.get("numero_rapport", "")
+        if num_val:
+            filled["{{numéro_rapport}}"] = num_val
+
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         word.fill_placeholders(filled, output_path)
+
+        # ── Write back "rapport generé" to Excel ─────────────────────
+        report_num = computed_values.get("numero_rapport") or computed_values.get("report_number", "")
+        if report_num:
+            self._write_rapport_genere(row_number, report_num)
+
         return output_path

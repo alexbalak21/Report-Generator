@@ -7,19 +7,13 @@ from app.repository.rapport_repository import get_last_report_number, set_last_r
 
 class ReportStateManager:
     def __init__(self, state_path: str):
-        """
-        state_path: legacy path to report_state.json — kept only for one-time migration.
-        All state is now stored in the SQLite report_state table.
-        """
         self._legacy_path = state_path
         self._migrate_if_needed()
 
     def _migrate_if_needed(self):
-        """If report_state.json exists and SQLite has no entry yet, import it then delete it."""
         if not os.path.exists(self._legacy_path):
             return
         if get_last_report_number() is not None:
-            # Already migrated — just remove the stale file
             try:
                 os.remove(self._legacy_path)
             except OSError:
@@ -35,14 +29,42 @@ class ReportStateManager:
         except Exception:
             pass
 
-    def generate_report_number(self) -> str:
+    @staticmethod
+    def get_today_prefix() -> str:
+        return datetime.date.today().strftime("%y%m%d")
+
+    @staticmethod
+    def get_current_counter() -> int:
+        """Return the current daily counter (0 if none yet today)."""
         last = get_last_report_number()
+        prefix = datetime.date.today().strftime("%y%m%d")
+        if last and last.startswith(prefix + "-"):
+            try:
+                return int(last.split("-")[1])
+            except (IndexError, ValueError):
+                pass
+        return 0
 
-        today = datetime.date.today()
-        prefix = today.strftime("%y%m%d")  # e.g. 260627
+    @staticmethod
+    def set_counter(value: int) -> None:
+        """Manually override the daily counter (persists to DB)."""
+        prefix = datetime.date.today().strftime("%y%m%d")
+        set_last_report_number(f"{prefix}-{value:02d}")
 
-        if last and last.startswith(prefix):
-            new_counter = int(last.split("-")[1]) + 1
+    def generate_report_number(self) -> str:
+        """
+        Generate the next daily counter string: yymmdd-NN
+        (no prefix — the prefix comes from the mapping config and is
+        applied by the 'numéro_rapport' computed field in the mapping).
+        """
+        last = get_last_report_number()
+        prefix = self.get_today_prefix()
+
+        if last and last.startswith(prefix + "-"):
+            try:
+                new_counter = int(last.split("-")[1]) + 1
+            except (IndexError, ValueError):
+                new_counter = 1
         else:
             new_counter = 1
 
