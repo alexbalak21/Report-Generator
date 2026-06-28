@@ -1,7 +1,9 @@
 import re
+import copy
 from docx import Document
+from docx.oxml.ns import qn
 
-PLACEHOLDER_PATTERN = r"\{\{(.*?)\}\}"
+PLACEHOLDER_RE = re.compile(r"\{\{.*?\}\}")
 
 
 class WordProcessor:
@@ -14,11 +16,6 @@ class WordProcessor:
     # ------------------------------------------------------------------
 
     def _all_paragraphs(self):
-        """
-        Yield every paragraph in the document:
-        - body paragraphs
-        - paragraphs inside table cells (all rows, all cells, nested tables)
-        """
         yield from self.document.paragraphs
         for table in self.document.tables:
             yield from self._paragraphs_in_table(table)
@@ -35,41 +32,89 @@ class WordProcessor:
     # ------------------------------------------------------------------
 
     def extract_placeholders(self) -> list:
-        """Return all placeholder names found anywhere in the document."""
         found = []
         for para in self._all_paragraphs():
-            found.extend(re.findall(PLACEHOLDER_PATTERN, para.text))
+            found.extend(re.findall(r"\{\{(.*?)\}\}", para.text))
         return found
 
     def fill_placeholders(self, mapping: dict, output_path: str) -> None:
-        """
-        Replace every {{placeholder}} in the document with its mapped value.
-        Handles table cells and placeholders split across multiple runs.
-        """
         for para in self._all_paragraphs():
             self._replace_in_paragraph(para, mapping)
         self.document.save(output_path)
 
+    # ------------------------------------------------------------------
+    # Core replacement — preserves per-run formatting
+    # ------------------------------------------------------------------
+
     def _replace_in_paragraph(self, paragraph, mapping: dict) -> None:
         """
-        Word splits placeholders across runs (e.g. '{{' | 'field' | '}}').
-        Strategy: join all run text, replace, write back to first run.
+        Replace placeholders while preserving the formatting of the run
+        that contains (or starts) each placeholder.
+
+        Algorithm:
+        1. Merge runs that together form a split placeholder into a single run
+           (inheriting the first fragment's formatting).
+        2. For each run, do simple string replacement — the run keeps its own
+           bold/color/font because we never touch runs that don't contain a tag.
         """
         if not paragraph.runs:
             return
 
-        full_text = "".join(run.text for run in paragraph.runs)
+        full_text = "".join(r.text for r in paragraph.runs)
         if "{{" not in full_text:
             return
 
-        replaced = full_text
-        for placeholder, value in mapping.items():
-            if placeholder in replaced:
-                replaced = replaced.replace(placeholder, str(value))
+        # ── Step 1: consolidate split-run placeholders ─────────────────
+        self._merge_split_placeholders(paragraph)
 
-        if replaced == full_text:
-            return
+        # ── Step 2: replace in each run individually ───────────────────
+        for run in paragraph.runs:
+            if "{{" not in run.text:
+                continue
+            for placeholder, value in mapping.items():
+                if placeholder in run.text:
+                    run.text = run.text.replace(placeholder, str(value))
 
-        paragraph.runs[0].text = replaced
-        for run in paragraph.runs[1:]:
-            run.text = ""
+    def _merge_split_placeholders(self, paragraph) -> None:
+        """
+        Scan runs left-to-right.  When an opening '{{' has no matching '}}'
+        in the same run, keep absorbing subsequent runs (copying their text
+        into the first fragment's run, inheriting its formatting) until the
+        closing '}}' is found.
+        """
+        runs = paragraph.runs
+        i = 0
+        while i < len(runs):
+            text = runs[i].text
+            open_idx = text.find("{{")
+            if open_idx == -1:
+                i += 1
+                continue
+
+            # Check if the closing braces are already in this run
+            if "}}" in text[open_idx:]:
+                i += 1
+                continue
+
+            # Need to absorb subsequent runs until we find '}}'
+            j = i + 1
+            accumulated = text
+            while j < len(runs):
+                accumulated += runs[j].text
+                if "}}" in accumulated:
+                    break
+                j += 1
+
+            if "}}" not in accumulated:
+                # Malformed / incomplete placeholder — leave as-is
+                i += 1
+                continue
+
+            # Write accumulated text into run[i], clear runs i+1..j
+            runs[i].text = accumulated
+            for k in range(i + 1, j + 1):
+                runs[k].text = ""
+
+            # Don't advance i — the merged run might contain multiple placeholders
+            # but the outer loop will handle them in Step 2.
+            i += 1
