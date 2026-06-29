@@ -29,7 +29,7 @@ class TestReportGenerator(unittest.TestCase):
         # K-value is stored as a formula cell so the reader must resolve its computed value.
         wb = Workbook()
         ws = wb.active
-        ws.append(["date rapport", "temperature reception", "imp", "k value", "date emabalage", "dlc"])
+        ws.append(["date rapport", "temperature reception", "imp", "k value", "date emabalage", "dlc", "numero echantillon"])
         ws.append([
             datetime.date(2026, 6, 21),
             "4°C",
@@ -37,6 +37,7 @@ class TestReportGenerator(unittest.TestCase):
             None,
             datetime.date(2026, 5, 31),
             datetime.date(2026, 6, 14),
+            1,
         ])
         ws["D2"] = "=1-C2"
         wb.save(self.xlsx_path)
@@ -91,7 +92,16 @@ class TestReportGenerator(unittest.TestCase):
                 "placeholder": "{{dlc}}",
                 "operations": [{"type": "date_format", "format": "%d/%m/%Y"}]
             },
-            "numero_rapport": {"operation": "excel_day_counter", "date_column": "date rapport", "date_format": "%d/%m/%Y"}
+            "numero echantillon": {
+                "column": "numero echantillon",
+                "placeholder": "{{numero_echantillon}}"
+            },
+            "numero_rapport": {
+                "operation": "excel_day_counter",
+                "date_column": "date rapport",
+                "sample_column": "numero echantillon",
+                "date_format": "%d/%m/%Y"
+            }
         }
         with open(self.mapping_path, "w", encoding="utf-8") as f:
             json.dump(mapping, f, indent=2, ensure_ascii=False)
@@ -123,6 +133,7 @@ class TestReportGenerator(unittest.TestCase):
         self.assertIn("26%", text)
         self.assertIn("31/05/2026", text)
         self.assertIn("14/06/2026", text)
+        self.assertIn("260621-1", text)
 
 
 if __name__ == "__main__":

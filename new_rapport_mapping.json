@@ -172,9 +172,14 @@
     "format": "%d/%m/%Y",
     "placeholder": "{{date_du_jour}}"
   },
+  "numero echantillon": {
+    "column": "numero echantillon",
+    "placeholder": "{{numero_echantillon}}"
+  },
   "numero_rapport": {
     "operation": "excel_day_counter",
     "date_column": "date rapport",
+    "sample_column": "numero echantillon",
     "date_format": "%d/%m/%Y"
   },
   "file_name": {

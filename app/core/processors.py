@@ -171,16 +171,18 @@ def op_excel_day_counter(rule: dict, row_data: dict, excel_reader=None, row_numb
     then returns a report number in the format yymmdd-N.
 
     rule keys:
-      date_column  — Excel column name containing the report date (e.g. "date rapport")
-      date_format  — strptime format of that column's string values (e.g. "%d/%m/%Y")
+      date_column   — Excel column name containing the report date (e.g. "date rapport")
+      sample_column — Excel column name containing the sample number (e.g. "numero echantillon")
+      date_format   — strptime format of that column's string values (e.g. "%d/%m/%Y")
     """
     import datetime
 
     if excel_reader is None or row_number == 0:
         return None
 
-    date_column = rule.get("date_column", "date rapport")
-    date_fmt    = rule.get("date_format", "%d/%m/%Y")
+    date_column   = rule.get("date_column", "date rapport")
+    sample_column = rule.get("sample_column")
+    date_fmt      = rule.get("date_format", "%d/%m/%Y")
 
     # Get the date of the current row
     current_date_raw = row_data.get(date_column, "")
@@ -195,6 +197,13 @@ def op_excel_day_counter(rule: dict, row_data: dict, excel_reader=None, row_numb
             current_date = datetime.datetime.strptime(str(current_date_raw).strip(), "%Y-%m-%d").date()
         except ValueError:
             return None
+
+    day_str = current_date.strftime("%y%m%d")
+    if sample_column:
+        sample_value = row_data.get(sample_column, "")
+        if sample_value is None or str(sample_value).strip() == "":
+            return None
+        return f"{day_str}-{str(sample_value).strip()}"
 
     # Walk all data rows (row 2 .. current row) and count occurrences of current_date
     counter = 0
