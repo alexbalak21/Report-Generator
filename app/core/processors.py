@@ -20,8 +20,10 @@ def op_lowercase(rule, row_data):
 
 def op_format(rule, row_data):
     fmt = rule.get("format", "")
+    # Merge rule's own fields (e.g. "name") into the context so {name} resolves
+    context = {**rule, **row_data}
     try:
-        return fmt.format(**row_data)
+        return fmt.format(**context)
     except Exception:
         return ""
 
@@ -159,3 +161,69 @@ def op_lookup_join(rule: dict, row_data: dict, excel_reader=None) -> str | None:
 
     # No format string — return all collected values joined by ", "
     return ", ".join(v for v in collected.values() if v)
+
+# ── excel_day_counter ─────────────────────────────────────────────────────────
+
+def op_excel_day_counter(rule: dict, row_data: dict, excel_reader=None, row_number: int = 0) -> str | None:
+    """
+    Counts how many times the date in `date_column` for the current row
+    has appeared in that column up to and including the current row,
+    then returns a report number in the format yymmdd-N.
+
+    rule keys:
+      date_column  — Excel column name containing the report date (e.g. "date rapport")
+      date_format  — strptime format of that column's string values (e.g. "%d/%m/%Y")
+    """
+    import datetime
+
+    if excel_reader is None or row_number == 0:
+        return None
+
+    date_column = rule.get("date_column", "date rapport")
+    date_fmt    = rule.get("date_format", "%d/%m/%Y")
+
+    # Get the date of the current row
+    current_date_raw = row_data.get(date_column, "")
+    if not current_date_raw:
+        return None
+
+    try:
+        current_date = datetime.datetime.strptime(str(current_date_raw).strip(), date_fmt).date()
+    except ValueError:
+        # Maybe it's already a date object stored as string from normalization
+        try:
+            current_date = datetime.datetime.strptime(str(current_date_raw).strip(), "%Y-%m-%d").date()
+        except ValueError:
+            return None
+
+    # Walk all data rows (row 2 .. current row) and count occurrences of current_date
+    counter = 0
+    ws = excel_reader.worksheet  # openpyxl worksheet
+
+    # Find the column index for date_column
+    headers = {}
+    for cell in ws[1]:
+        if cell.value is not None:
+            headers[str(cell.value).strip()] = cell.column
+
+    if date_column not in headers:
+        return None
+
+    col_idx = headers[date_column]
+
+    for r in range(2, row_number + 1):
+        cell_val = ws.cell(row=r, column=col_idx).value
+        if cell_val is None:
+            continue
+        try:
+            if isinstance(cell_val, (datetime.date, datetime.datetime)):
+                row_date = cell_val.date() if isinstance(cell_val, datetime.datetime) else cell_val
+            else:
+                row_date = datetime.datetime.strptime(str(cell_val).strip(), date_fmt).date()
+            if row_date == current_date:
+                counter += 1
+        except ValueError:
+            continue
+
+    day_str = current_date.strftime("%y%m%d")
+    return f"{day_str}-{counter}"

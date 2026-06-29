@@ -59,15 +59,17 @@ def resolve_output_path(mapping_path: str, excel_path: str,
             return peeked_number
 
         operations = {
-            "today":         processors.op_today,
-            "uppercase":     processors.op_uppercase,
-            "lowercase":     processors.op_lowercase,
-            "format":        processors.op_format,
-            "concat":        processors.op_concat,
-            "report_number": _peek_report_number_op,
-            "report_prefix": lambda rule, row: report_prefix,
-            "lookup":        lambda rule, row: processors.op_lookup(rule, row, excel),
-            "lookup_join":   lambda rule, row: processors.op_lookup_join(rule, row, excel),
+            "today":             processors.op_today,
+            "uppercase":         processors.op_uppercase,
+            "lowercase":         processors.op_lowercase,
+            "format":            processors.op_format,
+            "concat":            processors.op_concat,
+            "report_number":     _peek_report_number_op,
+            "report_prefix":     lambda rule, row: report_prefix,
+            "excel_day_counter": lambda rule, row: processors.op_excel_day_counter(
+                                     rule, row, excel, row_number),
+            "lookup":            lambda rule, row: processors.op_lookup(rule, row, excel),
+            "lookup_join":       lambda rule, row: processors.op_lookup_join(rule, row, excel),
         }
 
         excel = ExcelReader(excel_path)

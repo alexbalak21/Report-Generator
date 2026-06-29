@@ -2,9 +2,10 @@
   "config": {
     "data_file": "C:/repport_gen/rapport_data.xlsx",
     "template_file": "C:/repport_gen/rapport_template.docx",
-    "output_dir": "C:\\repport_gen\\out"
+    "output_dir": "C:\\repport_gen\\out",
+    "date_format": "%d/%m/%Y",
+    "report_prefix": "NOVOCIB"
   },
-  "numéro rapport": "{{numéro_rapport}}",
   "date rapport": "{{date_rapport}}",
   "appellation produit": "{{appellation_produit}}",
   "nom entreprise client": "{{nom_entreprise_client}}",
@@ -34,15 +35,19 @@
   "k value": "{{k_value}}",
   "conformite": "{{conformite}}",
   "qualite": "{{qualite}}",
-  "date du jour": {
+  "date_du_jour": {
     "operation": "today",
     "format": "%d/%m/%Y"
   },
   "report_number": {
     "operation": "report_number"
   },
+  "numero_rapport": {
+    "operation": "format",
+    "format": "{report_prefix} {report_number}"
+  },
   "file_name": {
     "operation": "format",
-    "format": "{numéro rapport}_{date du jour}_{report_number}.docx"
+    "format": "{numero_rapport}_{date_du_jour}.docx"
   }
 }

@@ -10,6 +10,8 @@ from tkinter import ttk, messagebox, filedialog
 
 from app.core.mapping_loader import MappingLoader
 from app.core.state_manager import ReportStateManager
+from app.core.excel_reader import ExcelReader
+from app.core.processors import op_excel_day_counter
 from app.gui.file_dialogs import (
     select_excel_file, select_docx_template,
     select_mapping_file, select_output_file,
@@ -24,7 +26,6 @@ DEFAULT_MAPPING = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "mappings", "data.json")
 )
 
-# Dummy state_path (only needed for legacy migration)
 _STATE_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "report_state.json")
 )
@@ -35,7 +36,7 @@ class MainWindow(tk.Tk):
         super().__init__()
 
         self.title("Report Generator")
-        self.geometry("620x540")
+        self.geometry("620x500")
         self.resizable(False, False)
 
         self.excel_path    = tk.StringVar()
@@ -45,9 +46,7 @@ class MainWindow(tk.Tk):
         self.report_name   = tk.StringVar()
         self.line_number   = tk.IntVar(value=2)
 
-        # Report counter — editable by the user
         self._state_mgr = ReportStateManager(_STATE_PATH)
-        self.report_counter = tk.IntVar(value=self._state_mgr.get_current_counter())
 
         self._build_ui()
         self._restore()
@@ -68,21 +67,20 @@ class MainWindow(tk.Tk):
         ttk.Separator(self, orient="horizontal").pack(fill="x", padx=14, pady=10)
 
         LineSelector(self, variable=self.line_number).pack(padx=14, pady=4)
-
-        # Report counter row
-        self._counter_row()
+        # Recompute preview whenever line changes
+        self.line_number.trace_add("write", lambda *_: self._update_preview())
 
         ttk.Separator(self, orient="horizontal").pack(fill="x", padx=14, pady=10)
 
-        # Preview of the next report number
         self._preview_label = ttk.Label(self, text="", foreground="#888888", font=("Arial", 9))
         self._preview_label.pack()
-        self._update_preview()
 
         ttk.Button(
             self, text="Generate report",
             command=self.on_generate_report,
         ).pack(pady=(8, 16), ipadx=20, ipady=6)
+
+        self._update_preview()
 
     def _path_row(self, label: str, btn_text: str, cmd, var: tk.StringVar):
         frame = ttk.Frame(self)
@@ -101,57 +99,78 @@ class MainWindow(tk.Tk):
         ttk.Label(frame, textvariable=self.output_dir, foreground="#1a5fb4",
                   wraplength=260, anchor="w").pack(side="left", fill="x", expand=True)
 
-    def _counter_row(self):
-        frame = ttk.Frame(self)
-        frame.pack(fill="x", padx=14, pady=3)
-        ttk.Label(frame, text="Report counter:", width=18, anchor="w").pack(side="left")
-
-        vcmd = (self.register(self._validate_counter), "%P")
-        ttk.Entry(
-            frame, textvariable=self.report_counter,
-            width=6, justify="center",
-            validate="key", validatecommand=vcmd,
-        ).pack(side="left", padx=(0, 8))
-
-        ttk.Label(
-            frame,
-            text="(next report will use counter + 1)",
-            foreground="#888888", font=("Arial", 9),
-        ).pack(side="left")
-
-        # Update preview whenever counter changes
-        self.report_counter.trace_add("write", lambda *_: self._update_preview())
-
     def _report_name_row(self):
         frame = ttk.Frame(self)
         frame.pack(fill="x", padx=14, pady=3)
         ttk.Label(frame, text="Name of the report:", width=18, anchor="w").pack(side="left")
-        entry = ttk.Entry(frame, textvariable=self.report_name, width=30)
-        entry.pack(side="left", padx=(0, 8))
-        ttk.Label(
-            frame, text="(prefix used in report number)",
-            foreground="#888888", font=("Arial", 9),
-        ).pack(side="left")
-        # Persist to mapping config whenever the user edits the field
+        ttk.Entry(frame, textvariable=self.report_name, width=36).pack(side="left", padx=(0, 8))
         self.report_name.trace_add("write", self._on_report_name_changed)
 
     def _on_report_name_changed(self, *_):
-        name = self.report_name.get()
-        self._update_mapping_config(report_prefix=name)
+        mapping = self.mapping_path.get()
+        if not mapping:
+            return
+        try:
+            MappingLoader(mapping).update_file_name_field(name=self.report_name.get())
+        except Exception:
+            pass
         self._update_preview()
 
-    @staticmethod
-    def _validate_counter(value: str) -> bool:
-        return value == "" or (value.isdigit() and int(value) >= 0)
+    # ------------------------------------------------------------------
+    # Preview — computed from Excel using the selected row
+    # ------------------------------------------------------------------
+
+    def _compute_numero_rapport(self) -> str:
+        """
+        Read the 'date rapport' column for the selected row and compute
+        the Excel-based day counter (yymmdd-N), exactly as the generator does.
+        Returns a string like '260621-3' or '' on any error.
+        """
+        excel_path   = self.excel_path.get()
+        mapping_path = self.mapping_path.get()
+        row_number   = self.line_number.get()
+
+        if not excel_path or not mapping_path or row_number < 2:
+            return ""
+
+        try:
+            loader  = MappingLoader(mapping_path)
+            rules   = loader.load()
+            cfg     = loader.load_config()
+            date_fmt = cfg.get("date_format", "%d/%m/%Y")
+
+            numero_rule = rules.get("numero_rapport")
+            if not isinstance(numero_rule, dict):
+                return ""
+
+            reader = ExcelReader(excel_path)
+            reader.load()
+            raw_row  = reader.get_row_as_dict(row_number)
+
+            row_data = {}
+            import datetime as dt
+            for k, v in raw_row.items():
+                if isinstance(v, (dt.date, dt.datetime)):
+                    row_data[k] = v.strftime(date_fmt)
+                elif v is None:
+                    row_data[k] = ""
+                else:
+                    row_data[k] = str(v).strip()
+
+            result = op_excel_day_counter(numero_rule, row_data, reader, row_number)
+            return result or ""
+        except Exception:
+            return ""
 
     def _update_preview(self):
         try:
-            prefix = self._state_mgr.get_today_prefix()
-            next_n = self.report_counter.get() + 1
+            numero = self._compute_numero_rapport()
             name   = self.report_name.get().strip()
-            number = f"{prefix}-{next_n:02d}"
-            display = f"{name} {number}".strip() if name else number
-            self._preview_label.config(text=f"Next report number: {display}")
+            if numero:
+                display = f"{name} {numero}".strip() if name else numero
+            else:
+                display = "—"
+            self._preview_label.config(text=f"Report number: {display}")
         except Exception:
             pass
 
@@ -174,13 +193,7 @@ class MainWindow(tk.Tk):
         if state.get("output_dir"):
             self.output_dir.set(state["output_dir"])
 
-        # Restore report name (prefix) from mapping config
-        report_prefix = state.get("mapping_cfg", {}).get("report_prefix", "")
-        if report_prefix:
-            self.report_name.set(report_prefix)
-
-        # Refresh counter from DB in case another session changed it
-        self.report_counter.set(self._state_mgr.get_current_counter())
+        self._update_preview()
 
     # ------------------------------------------------------------------
     # Button callbacks
@@ -191,6 +204,7 @@ class MainWindow(tk.Tk):
         if path:
             self.excel_path.set(path)
             self._update_mapping_config(data_file=path)
+            self._update_preview()
 
     def on_select_template(self):
         path = select_docx_template()
@@ -204,6 +218,7 @@ class MainWindow(tk.Tk):
             self.mapping_path.set(path)
             save_mapping_path(path)
             self._apply_mapping_config(path)
+            self._update_preview()
 
     def on_open_output_dir(self):
         directory = self.output_dir.get().strip()
@@ -232,8 +247,15 @@ class MainWindow(tk.Tk):
             self.template_path.set(cfg["template_file"])
         if cfg.get("output_dir"):
             self.output_dir.set(cfg["output_dir"])
-        if cfg.get("report_prefix"):
-            self.report_name.set(cfg["report_prefix"])
+
+        # Load report name from file_name.name
+        try:
+            fn = MappingLoader(mapping_path).load_file_name_field()
+            name = fn.get("name", "")
+            if name:
+                self.report_name.set(name)
+        except Exception:
+            pass
 
     def _update_mapping_config(self, **kwargs):
         mapping = self.mapping_path.get()
@@ -260,29 +282,18 @@ class MainWindow(tk.Tk):
             messagebox.showerror("Invalid line", "Row number must be ≥ 2 (row 1 is the header).")
             return
 
-        # Persist the manually-set counter before generation (so the generator picks up N+1)
-        try:
-            self._state_mgr.set_counter(self.report_counter.get())
-        except Exception:
-            pass
-
-        # Determine output dir: prefer the UI field, then mapping config, then cwd
         chosen_output_dir = self.output_dir.get().strip() or None
-
-        # Pre-compute the suggested path from mapping config + file_name field
         suggested_dir, suggested_name = resolve_output_path(mapping, excel, docx, line)
         if chosen_output_dir:
             suggested_dir = chosen_output_dir
 
-        # Ask the user to confirm or change the save location
         output_path = select_output_file(
             initial_dir=suggested_dir,
             initial_file=suggested_name,
         )
         if not output_path:
-            return  # user cancelled
+            return
 
-        # If the user changed the output folder, persist it
         final_dir = os.path.dirname(os.path.abspath(output_path))
         if final_dir != os.path.abspath(suggested_dir):
             self._update_mapping_config(output_dir=final_dir)
@@ -298,9 +309,6 @@ class MainWindow(tk.Tk):
 
         save_config(excel, docx, mapping, line)
         self.line_number.set(line + 1)
-
-        # Refresh counter display after generation (it was incremented inside generator)
-        self.report_counter.set(self._state_mgr.get_current_counter())
         self._update_preview()
 
         messagebox.showinfo("Done", f"Report generated:\n{final_path}")

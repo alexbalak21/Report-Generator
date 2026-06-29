@@ -1,10 +1,9 @@
 {
   "config": {
-    "data_file": "C:/repport_gen/rapport_data.xlsx",
+    "data_file": "S:/DEV/Report-Generator/final_rapport_data.xlsx",
     "template_file": "C:/repport_gen/rapport_template.docx",
     "output_dir": "C:\\repport_gen\\out",
-    "date_format": "%d/%m/%Y",
-    "report_prefix": "NOVOCIB"
+    "date_format": "%d/%m/%Y"
   },
   "date rapport": "{{date_rapport}}",
   "appellation produit": "{{appellation_produit}}",
@@ -39,15 +38,14 @@
     "operation": "today",
     "format": "%d/%m/%Y"
   },
-  "report_number": {
-    "operation": "report_number"
-  },
   "numero_rapport": {
-    "operation": "format",
-    "format": "{report_prefix} {report_number}"
+    "operation": "excel_day_counter",
+    "date_column": "date rapport",
+    "date_format": "%d/%m/%Y"
   },
   "file_name": {
+    "name": "NOVOCIB Rapport d'essai",
     "operation": "format",
-    "format": "{numero_rapport}_{date_du_jour}.docx"
+    "format": "{name} {numero_rapport}.docx"
   }
 }

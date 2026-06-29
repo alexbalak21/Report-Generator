@@ -50,6 +50,11 @@ class ExcelReader:
         self._ensure_loaded()
         return self.workbook.active
 
+    @property
+    def worksheet(self):
+        """Alias — used by processors that need direct cell access."""
+        return self.sheet
+
     def get_columns(self) -> list[str]:
         """Return normalized column names from the first (active) sheet."""
         self._ensure_loaded()
