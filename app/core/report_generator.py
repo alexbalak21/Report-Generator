@@ -148,24 +148,54 @@ class ReportGenerator:
         # Inject report_prefix into computed values so format strings can use {report_prefix}
         computed_values["report_prefix"] = report_prefix
 
-        # ── Pass 1: simple column mappings ────────────────────────────
+        # ── Pass 1: simple column mappings and operations-based mappings ──
         for key, rule in mapping.items():
-            if not isinstance(rule, str):
+            # Legacy string rules ("{{placeholder}}") — keep existing behaviour
+            if isinstance(rule, str):
+                normalized_key = self._normalize_header(key)
+                if normalized_key not in excel_columns:
+                    continue
+                if normalized_key not in row_data:
+                    continue
+                match = re.search(r"\{\{(.*?)\}\}", rule)
+                if not match:
+                    continue
+                placeholder_name = match.group(1).strip()
+                if placeholder_name not in available_placeholders:
+                    continue
+                value = row_data[normalized_key]
+                filled[rule] = value
+                computed_values[key] = value
                 continue
-            normalized_key = self._normalize_header(key)
-            if normalized_key not in excel_columns:
-                continue
-            if normalized_key not in row_data:
-                continue
-            match = re.search(r"\{\{(.*?)\}\}", rule)
-            if not match:
-                continue
-            placeholder_name = match.group(1).strip()
-            if placeholder_name not in available_placeholders:
-                continue
-            value = row_data[normalized_key]
-            filled[rule] = value
-            computed_values[key] = value
+
+            # New-style mapping: dict with a 'column' and optional 'operations'
+            if isinstance(rule, dict) and "column" in rule and "placeholder" in rule:
+                column_name = self._normalize_header(rule.get("column", ""))
+                if column_name not in excel_columns:
+                    continue
+
+                # Use the raw row values (not the normalized string `row_data`) so numeric
+                # operations can operate on actual numbers.
+                value = raw_row.get(column_name)
+
+                # Apply operations pipeline if present
+                try:
+                    value_processed = processors.apply_operations(
+                        value, rule.get("operations"), {**row_data, **computed_values}, excel
+                    )
+                except Exception:
+                    value_processed = value
+
+                placeholder = rule.get("placeholder")
+                match = re.search(r"\{\{(.*?)\}\}", placeholder) if isinstance(placeholder, str) else None
+                if not match:
+                    continue
+                placeholder_name = match.group(1).strip()
+                if placeholder_name not in available_placeholders:
+                    continue
+
+                filled[placeholder] = value_processed
+                computed_values[key] = value_processed
 
         # ── Pass 2: computed fields (excluding file_name) ─────────────
         max_passes = len(mapping) + 1

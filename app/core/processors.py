@@ -227,3 +227,102 @@ def op_excel_day_counter(rule: dict, row_data: dict, excel_reader=None, row_numb
 
     day_str = current_date.strftime("%y%m%d")
     return f"{day_str}-{counter}"
+
+
+def apply_operations(value, operations: list | None, row_data: dict | None = None, excel_reader=None):
+    """
+    Apply a list of small transformation operations to `value`.
+
+    Supported operation types:
+      - formula: noop (workbook is loaded with data_only=True so value is already computed)
+      - multiply/divide/add/subtract (use numeric coercion)
+      - round (decimals int)
+      - suffix/prefix (string concatenation)
+      - upper/lower/strip
+
+    Returns the transformed value (may be numeric or string depending on ops).
+    """
+    if not operations:
+        return value
+
+    v = value
+
+    def _to_number(x):
+        if x is None:
+            raise ValueError("None is not a number")
+        if isinstance(x, (int, float)):
+            return float(x)
+        s = str(x).strip()
+        if s == "":
+            raise ValueError("empty string")
+        # Accept comma as decimal separator as a convenience
+        s = s.replace(",", ".")
+        return float(s)
+
+    for op in operations:
+        t = op.get("type")
+        if t == "formula":
+            # workbook loaded with data_only=True; nothing to do
+            continue
+
+        if t in ("multiply", "divide", "add", "subtract"):
+            try:
+                num = _to_number(v)
+            except Exception:
+                # Cannot coerce to number — skip numeric op
+                continue
+            operand = op.get("value", 0)
+            try:
+                operand = float(operand)
+            except Exception:
+                operand = 0.0
+
+            if t == "multiply":
+                num = num * operand
+            elif t == "divide":
+                if operand == 0:
+                    # avoid ZeroDivisionError
+                    pass
+                else:
+                    num = num / operand
+            elif t == "add":
+                num = num + operand
+            elif t == "subtract":
+                num = num - operand
+
+            v = num
+            continue
+
+        if t == "round":
+            decimals = int(op.get("decimals", 0))
+            try:
+                num = _to_number(v)
+                rounded = round(num, decimals)
+                # If zero decimals prefer int for nicer display (73 instead of 73.0)
+                v = int(rounded) if decimals == 0 else rounded
+            except Exception:
+                # If not numeric, leave as-is
+                pass
+            continue
+
+        if t == "suffix":
+            v = f"{v}{op.get('value','')}"
+            continue
+
+        if t == "prefix":
+            v = f"{op.get('value','')}{v}"
+            continue
+
+        if t == "upper":
+            v = str(v).upper()
+            continue
+
+        if t == "lower":
+            v = str(v).lower()
+            continue
+
+        if t == "strip":
+            v = str(v).strip()
+            continue
+
+    return v

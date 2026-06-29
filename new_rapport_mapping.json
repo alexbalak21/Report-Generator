@@ -1,0 +1,173 @@
+{
+  "config": {
+    "data_file": "S:/DEV/Report-Generator/data/final_rapport_data.xlsx",
+    "template_file": "S:/DEV/Report-Generator/data/rapport_template.docx",
+    "output_dir": "S:/DEV/Report-Generator/out",
+    "date_format": "%d/%m/%Y"
+  },
+  "date rapport": {
+    "column": "date rapport",
+    "placeholder": "{{date_rapport}}"
+  },
+  "appellation produit": {
+    "column": "appellation produit",
+    "placeholder": "{{appellation_produit}}"
+  },
+  "nom entreprise client": {
+    "column": "nom entreprise client",
+    "placeholder": "{{nom_entreprise_client}}"
+  },
+  "adresse entreprise client": {
+    "column": "adresse entreprise client",
+    "placeholder": "{{adresse_entreprise_client}}"
+  },
+  "nom destinataire": {
+    "column": "nom destinataire",
+    "placeholder": "{{nom_destinataire}}"
+  },
+  "titre poste destinataire": {
+    "column": "titre poste destinataire",
+    "placeholder": "{{titre_poste_destinataire}}"
+  },
+  "Lieu de prelevment": {
+    "column": "Lieu de prelevment",
+    "placeholder": "{{Lieu_de_prelevment}}"
+  },
+  "date heure prelevment": {
+    "column": "date heure prelevment",
+    "placeholder": "{{date_heure_prelevment}}"
+  },
+  "adresse prelevement": {
+    "column": "adresse prelevement",
+    "placeholder": "{{adresse_prelevement}}"
+  },
+  "ville prelevement": {
+    "column": "ville prelevement",
+    "placeholder": "{{ville_prelevement}}"
+  },
+  "conditions coservation reception": {
+    "column": "conditions coservation reception",
+    "placeholder": "{{conditions_coservation_reception}}"
+  },
+  "date heure arrive labo": {
+    "column": "date heure arrive labo",
+    "placeholder": "{{date_heure_arrive_labo}}"
+  },
+  "temperature reception": {
+    "column": "temperature reception",
+    "placeholder": "{{temperature_reception}}"
+  },
+  "date heure mise en analyse": {
+    "column": "date heure mise en analyse",
+    "placeholder": "{{date_heure_mise_en_analyse}}"
+  },
+  "fournisseur fabricant": {
+    "column": "fournisseur fabricant",
+    "placeholder": "{{fournisseur_fabricant}}"
+  },
+  "nom produit": {
+    "column": "nom produit",
+    "placeholder": "{{nom_produit}}"
+  },
+  "conditionnement": {
+    "column": "conditionnement",
+    "placeholder": "{{conditionnement}}"
+  },
+  "espece": {
+    "column": "espece",
+    "placeholder": "{{espece}}"
+  },
+  "agrement": {
+    "column": "agrement",
+    "placeholder": "{{agrement}}"
+  },
+  "origine": {
+    "column": "origine",
+    "placeholder": "{{origine}}"
+  },
+  "lot": {
+    "column": "lot",
+    "placeholder": "{{lot}}"
+  },
+  "date emabalage": {
+    "column": "date emabalage",
+    "placeholder": "{{date_emabalage}}"
+  },
+  "code article": {
+    "column": "code article",
+    "placeholder": "{{code_article}}"
+  },
+  "dlc": {
+    "column": "dlc",
+    "placeholder": "{{dlc}}"
+  },
+  "lot precice": {
+    "column": "lot precice",
+    "placeholder": "{{lot_precice}}"
+  },
+  "imp": {
+    "column": "imp",
+    "placeholder": "{{imp}}",
+    "operations": [
+      {
+        "type": "formula"
+      },
+      {
+        "type": "multiply",
+        "value": 100
+      },
+      {
+        "type": "round",
+        "decimals": 0
+      },
+      {
+        "type": "suffix",
+        "value": "%"
+      }
+    ]
+  },
+  "k value": {
+    "column": "k value",
+    "placeholder": "{{k_value}}",
+    "operations": [
+      {
+        "type": "formula"
+      },
+      {
+        "type": "multiply",
+        "value": 100
+      },
+      {
+        "type": "round",
+        "decimals": 0
+      },
+      {
+        "type": "suffix",
+        "value": "%"
+      }
+    ]
+  },
+  "conformite": {
+    "column": "conformite",
+    "placeholder": "{{conformite}}"
+  },
+  "qualite": {
+    "column": "qualite",
+    "placeholder": "{{qualite}}"
+  },
+  "date_du_jour": {
+    "operation": "today",
+    "format": "%d/%m/%Y",
+    "placeholder": "{{date_du_jour}}"
+  },
+  "numero_rapport": {
+    "operation": "excel_day_counter",
+    "date_column": "date rapport",
+    "date_format": "%d/%m/%Y"
+  },
+  "file_name": {
+    "name": "NOVOCIB Rapport d'essai",
+    "operation": "format",
+    "format": "{name} {numero_rapport}.docx"
+  }
+}
