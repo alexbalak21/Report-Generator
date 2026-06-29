@@ -1,6 +1,9 @@
 import os
 import re
-import openpyxl
+try:
+    import openpyxl
+except Exception:
+    openpyxl = None
 
 from .excel_reader import ExcelReader
 from .word_processor import WordProcessor
@@ -29,6 +32,8 @@ class ReportGenerator:
         self.state_manager  = ReportStateManager(
             os.path.join(os.path.dirname(mapping_path), "report_state.json")
         )
+        if openpyxl is None:
+            raise ImportError("openpyxl is required for ReportGenerator")
 
     # ------------------------------------------------------------------
     # Helpers

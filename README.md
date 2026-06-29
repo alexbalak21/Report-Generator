@@ -1,6 +1,6 @@
   # Rapport-Generator
 
-  A desktop application for generating Word `.docx` reports from Excel data, driven by JSON mapping configurations and a Tkinter GUI. All state is persisted in a local SQLite database — no loose JSON files.
+  A desktop application for generating Word `.docx` reports from Excel data, driven by JSON mapping configurations and a Tkinter GUI. All report-state and UI state are persisted in a local SQLite database; mappings remain editable JSON.
 
   ---
 
@@ -13,6 +13,7 @@
   - The chosen output folder is persisted to both the mapping JSON and SQLite for next time
   - Support for multiple mapping configurations (one per report type / template)
   - Computed fields: today's date, uppercase/lowercase, string formatting, concatenation, auto-incrementing report numbers
+  - New JSON-driven field transformations: numeric scaling, rounding, date formatting, suffix/prefix, and formula evaluation from Excel
   - Report counter stored in SQLite — no `report_state.json` file; auto-migrated from JSON on first run if one exists
   - Full audit trail: every generated report is logged to SQLite
   - All GUI state (paths, last row) restored automatically on next launch
@@ -169,6 +170,40 @@
 
   The key must match the Excel column header exactly (case-sensitive, trimmed).
 
+  ### Column mapping with operations
+
+  The new JSON format also supports a richer, data-driven mapping object for fields that need transformation before insertion into the document.
+
+  ```json
+  "imp": {
+    "column": "imp",
+    "placeholder": "{{imp}}",
+    "operations": [
+      { "type": "formula" },
+      { "type": "multiply", "value": 100 },
+      { "type": "round", "decimals": 0 },
+      { "type": "suffix", "value": "%" }
+    ]
+  },
+  "k value": {
+    "column": "k value",
+    "placeholder": "{{k_value}}",
+    "operations": [
+      { "type": "formula" },
+      { "type": "multiply", "value": 100 },
+      { "type": "round", "decimals": 0 },
+      { "type": "suffix", "value": "%" }
+    ]
+  }
+  ```
+
+  In this format:
+  - `column` is the Excel header name
+  - `placeholder` is the template token written in the Word document
+  - `operations` is an ordered list of transformations applied to the value
+
+  Use this for any future column that needs a calculation, formatting step, or formula-based value.
+
   ### Computed fields
 
   ```json
@@ -182,33 +217,57 @@
 
   ---
 
-  ## Supported operations
+  ## Supported computed-field operations
 
-  | Operation       | Description                                                   | Parameters                                    |
-  |-----------------|---------------------------------------------------------------|-----------------------------------------------|
-  | `today`         | Today's date                                                  | `format` — strftime string                    |
-  | `uppercase`     | Excel field value in uppercase                                | `input` — Excel column name                   |
-  | `lowercase`     | Excel field value in lowercase                                | `input` — Excel column name                   |
-  | `format`        | Python-style format string using any column or computed field | `format` — e.g. `"{species}_{date}"`          |
-  | `concat`        | Concatenate multiple Excel columns                            | `parts` — list of column names                |
-  | `report_number` | Auto-incrementing daily counter (`YYMMDD-XX`)                 | _(none)_                                      |
+  | Operation         | Description                                                                     | Parameters                                    |
+  |-------------------|---------------------------------------------------------------------------------|-----------------------------------------------|
+  | `today`           | Today's date                                                                    | `format` — strftime string                    |
+  | `uppercase`       | Excel field value in uppercase                                                  | `input` — Excel column or field name          |
+  | `lowercase`       | Excel field value in lowercase                                                  | `input` — Excel column or field name          |
+  | `format`          | Python-style string template using any available field                         | `format` — e.g. `"{species}_{date}"`         |
+  | `concat`          | Concatenate several values from Excel columns or computed fields               | `parts` — list of names                        |
+  | `report_number`   | Auto-incrementing report ID for the day (`YYMMDD-XX`)                          | _(none)_                                      |
+  | `report_prefix`   | Returns a prefix string from mapping config                                    | _(none)_                                      |
+  | `excel_day_counter` | Generates a daily counter based on a date column                             | `date_column`, `date_format`                  |
+  | `lookup`          | Simple foreign-key lookup across Excel sheets                                  | `sheet`, `key`, `match`, `value`              |
+  | `lookup_join`     | Multi-step relational lookup (join chain)                                      | `steps`, `format`                              |
+
+  ### Supported field-transformation operations
+
+  Use these inside a mapping `operations` list when you need to transform a value from an Excel column before placing it in the document.
+
+  | Type        | Description                                                         | Parameters                              |
+  |-------------|---------------------------------------------------------------------|-----------------------------------------|
+  | `formula`    | No-op; reads the evaluated Excel value when the workbook is loaded with `data_only=True` | _(none)_                          |
+  | `multiply`   | Multiply the value by a number                                      | `value`                                 |
+  | `divide`     | Divide the value by a number                                        | `value`                                 |
+  | `add`        | Add a number to the value                                           | `value`                                 |
+  | `subtract`   | Subtract a number from the value                                    | `value`                                 |
+  | `round`      | Round a numeric value                                                | `decimals`                              |
+  | `date_format`| Parse and render a date value in a specified format                  | `format`                                |
+  | `suffix`     | Append text after the value                                         | `value`                                 |
+  | `prefix`     | Prepend text before the value                                       | `value`                                 |
+  | `upper`      | Uppercase the text                                                  | _(none)_                                |
+  | `lower`      | Lowercase the text                                                  | _(none)_                                |
+  | `strip`      | Trim whitespace from the text                                       | _(none)_                                |
 
   ### `format` field references
 
   The `format` operation can reference:
   - Any Excel column by its header name: `{species}`, `{date}`
   - Any previously computed field: `{report_number}`, `{today_date}`
+  - Fields available from column mappings with `operations` if they are also stored in the mapping result
   - `file_name` is always resolved last so it can use `{report_number}`
 
   ### Examples
 
   ```json
-  "today_date":     { "operation": "today",     "format": "%d/%m/%Y" },
-  "species_upper":  { "operation": "uppercase",  "input": "species" },
-  "label":          { "operation": "format",     "format": "{species} – {address}" },
-  "ref":            { "operation": "concat",     "parts": ["inspector", "species"] },
-  "report_number":  { "operation": "report_number" },
-  "file_name":      { "operation": "format",     "format": "{species}_{date}_{report_number}.docx" }
+  "today_date":     { "operation": "today",            "format": "%d/%m/%Y" },
+  "species_upper":  { "operation": "uppercase",        "input": "species" },
+  "label":          { "operation": "format",           "format": "{species} – {address}" },
+  "ref":            { "operation": "concat",           "parts": ["inspector", "species"] },
+  "report_number":  { "operation": "excel_day_counter", "date_column": "date rapport", "date_format": "%d/%m/%Y" },
+  "file_name":      { "operation": "format",           "format": "{species}_{date}_{report_number}.docx" }
   ```
 
   ---
@@ -225,6 +284,8 @@
   ```
 
   Any placeholder not matched by the mapping is left unchanged.
+
+  Note: the app also aliases `numero_rapport` to `{{numéro_rapport}}` so templates can use either spelling.
 
   ---
 

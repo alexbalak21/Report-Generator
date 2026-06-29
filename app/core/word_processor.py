@@ -1,13 +1,19 @@
 import re
 import copy
-from docx import Document
-from docx.oxml.ns import qn
+try:
+    from docx import Document
+    from docx.oxml.ns import qn
+except Exception:
+    Document = None
+    qn = None
 
 PLACEHOLDER_RE = re.compile(r"\{\{.*?\}\}")
 
 
 class WordProcessor:
     def __init__(self, filepath):
+        if Document is None:
+            raise ImportError("python-docx is required for WordProcessor")
         self.filepath = filepath
         self.document = Document(filepath)
 
