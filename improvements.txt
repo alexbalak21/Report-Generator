@@ -1,5 +1,0 @@
-make a dropdown menu to quickly select the json file from a list of imported files use the db to store the imported files.
-
-on xlsx make the address on a second sheet of data named addresses so the cell will reference the row number of "addresses" sheet
-
-Same for species
