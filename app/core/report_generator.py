@@ -181,9 +181,9 @@ class ReportGenerator:
 
                 # Use normalized row_data for simple values and raw_row for numeric operations.
                 if rule.get("operations"):
-                    value = raw_row.get(column_name)
+                    value = raw_row.get(column_name, row_data.get(column_name, ""))
                 else:
-                    value = row_data.get(column_name, raw_row.get(column_name))
+                    value = row_data.get(column_name, raw_row.get(column_name, ""))
 
                 # Apply operations pipeline if present
                 try:

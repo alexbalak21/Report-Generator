@@ -46,9 +46,10 @@ class ExcelReader:
             for index, header in enumerate(headers):
                 data_value = data_row[index] if index < len(data_row) else None
                 formula_cell = formula_row[index] if index < len(formula_row) else None
-                row_data[header] = self._resolve_cell_value(
+                value = self._resolve_cell_value(
                     data_value, formula_cell, data_sheet, formula_sheet
                 )
+                row_data[header] = "" if value is None else value
             result.append(row_data)
         return result
 
