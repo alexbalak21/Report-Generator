@@ -1,13 +1,261 @@
-In the excel : IMP : 73.8026819923372% & k value :  0.26197318007662795 
+This is my new version.
+
+In the generated_report .docx I got :
+
+IMP 0.738026819923372%
+
+K-value 
+
+In my K value column in the excel : I have got calcaulation :
+
+=1-AB2
+
+=1-AB3
+
+=1-AB3
 
 
+I need to see:
 
-So the imp &  k value needs calculations 
+IMP 73%
+and K-value 26% 
+
+so perform the calculation in the excel and then  put it in the right format
+
+can you put the calculations that need to be done into the json and then interpret it in python so, if I have future cells that needs calculations, I will just add it to json and not code
 
 
-
-The imp needs keep only ints and k value need *100 and keeps only int
-
+This is what chat gpt advised:
 
 
-In the report I need to read 73% and 26% 
+Yes. This is a much better design.
+
+Instead of hardcoding every special case (IMP, K-value, etc.) in Python, your JSON should describe how the value should be transformed, and Python should simply execute the operations.
+
+For example, extend your mapping like this:
+
+{
+  "imp": {
+    "placeholder": "{{imp}}",
+    "operations": [
+      {
+        "type": "multiply",
+        "value": 100
+      },
+      {
+        "type": "round",
+        "decimals": 0
+      },
+      {
+        "type": "suffix",
+        "value": "%"
+      }
+    ]
+  },
+
+  "k value": {
+    "placeholder": "{{k_value}}",
+    "operations": [
+      {
+        "type": "formula"
+      },
+      {
+        "type": "multiply",
+        "value": 100
+      },
+      {
+        "type": "round",
+        "decimals": 0
+      },
+      {
+        "type": "suffix",
+        "value": "%"
+      }
+    ]
+  }
+}
+
+The nice part is that "formula" simply means:
+
+"Read the calculated value from Excel instead of the formula string."
+
+For example:
+
+Excel contains
+
+AB2 = 0.738026819923372
+
+AC2 = =1-AB2
+
+When pandas loads the workbook, it normally reads
+
+AC2 -> "=1-AB2"
+
+instead of
+
+0.261973180076628
+
+If you instead load the workbook with openpyxl using
+
+load_workbook(filename, data_only=True)
+
+Excel returns
+
+AC2 -> 0.261973180076628
+
+which is exactly what you want.
+
+Generic Python interpreter
+
+Instead of dozens of if statements, write one generic function.
+
+def apply_operations(value, operations):
+    if operations is None:
+        return value
+
+    for op in operations:
+
+        match op["type"]:
+
+            case "formula":
+                # value is already the calculated Excel value
+                pass
+
+            case "multiply":
+                value *= op["value"]
+
+            case "divide":
+                value /= op["value"]
+
+            case "add":
+                value += op["value"]
+
+            case "subtract":
+                value -= op["value"]
+
+            case "round":
+                value = round(value, op["decimals"])
+
+            case "suffix":
+                value = f"{value}{op['value']}"
+
+            case "prefix":
+                value = f"{op['value']}{value}"
+
+            case "upper":
+                value = str(value).upper()
+
+            case "lower":
+                value = str(value).lower()
+
+            case "strip":
+                value = str(value).strip()
+
+    return value
+
+Then your mapping code becomes something like
+
+mapping = config["imp"]
+
+value = excel_value
+
+value = apply_operations(
+    value,
+    mapping.get("operations")
+)
+
+No special cases.
+
+Even better JSON structure
+
+I would actually restructure the whole mapping so every field has the same format.
+
+{
+    "imp": {
+        "column": "IMP",
+        "placeholder": "{{imp}}",
+        "operations": [
+            {
+                "type": "multiply",
+                "value": 100
+            },
+            {
+                "type": "round",
+                "decimals": 0
+            },
+            {
+                "type": "suffix",
+                "value": "%"
+            }
+        ]
+    },
+
+    "k value": {
+        "column": "K-value",
+        "placeholder": "{{k_value}}",
+        "operations": [
+            {
+                "type": "multiply",
+                "value": 100
+            },
+            {
+                "type": "round",
+                "decimals": 0
+            },
+            {
+                "type": "suffix",
+                "value": "%"
+            }
+        ]
+    }
+}
+
+Then the generator becomes completely data-driven:
+
+For every field:
+    Read the column
+    Apply every operation
+    Replace the placeholder
+
+Adding a new transformation in the future only requires editing the JSON, for example:
+
+"protein": {
+    "placeholder": "{{protein}}",
+    "operations": [
+        {
+            "type": "divide",
+            "value": 1000
+        },
+        {
+            "type": "round",
+            "decimals": 2
+        },
+        {
+            "type": "suffix",
+            "value": " g"
+        }
+    ]
+}
+
+or
+
+"temperature": {
+    "placeholder": "{{temperature}}",
+    "operations": [
+        {
+            "type": "round",
+            "decimals": 1
+        },
+        {
+            "type": "suffix",
+            "value": " °C"
+        }
+    ]
+}
+
+The only change I would make to your current project is to load the workbook with openpyxl.load_workbook(..., data_only=True) (or otherwise evaluate formulas) so that formula cells like =1-AB2 return their computed numeric values instead of the formula text. Once that's done, the generic operations pipeline above will correctly produce:
+
+0.738026819923372 → 73%
+=1-AB2 (evaluated to 0.261973180076628) → 26%
+
+without any Python changes when you add future transformations to the JSON.
