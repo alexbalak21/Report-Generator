@@ -40,6 +40,10 @@ class WordProcessor:
     def fill_placeholders(self, mapping: dict, output_path: str) -> None:
         for para in self._all_paragraphs():
             self._replace_in_paragraph(para, mapping)
+            if "{{" in para.text:
+                # Second pass may be needed for placeholders that were split across
+                # runs in a way the first merge pass did not fully consolidate.
+                self._replace_in_paragraph(para, mapping)
         self.document.save(output_path)
 
     # ------------------------------------------------------------------

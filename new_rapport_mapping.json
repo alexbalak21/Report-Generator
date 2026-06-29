@@ -91,7 +91,13 @@
   },
   "date emabalage": {
     "column": "date emabalage",
-    "placeholder": "{{date_emabalage}}"
+    "placeholder": "{{date_emabalage}}",
+    "operations": [
+      {
+        "type": "date_format",
+        "format": "%d/%m/%Y"
+      }
+    ]
   },
   "code article": {
     "column": "code article",
@@ -99,7 +105,13 @@
   },
   "dlc": {
     "column": "dlc",
-    "placeholder": "{{dlc}}"
+    "placeholder": "{{dlc}}",
+    "operations": [
+      {
+        "type": "date_format",
+        "format": "%d/%m/%Y"
+      }
+    ]
   },
   "lot precice": {
     "column": "lot precice",

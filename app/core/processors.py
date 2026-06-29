@@ -305,6 +305,37 @@ def apply_operations(value, operations: list | None, row_data: dict | None = Non
                 pass
             continue
 
+        if t == "date_format":
+            fmt = op.get("format", "%d/%m/%Y")
+            import datetime as _dt
+
+            # If it's already a date/datetime, format directly
+            if isinstance(v, (_dt.date, _dt.datetime)):
+                v = v.strftime(fmt)
+                continue
+
+            s = str(v).strip()
+            if not s:
+                continue
+
+            # Try ISO parse, then try the provided format, then common formats
+            parsed = None
+            try:
+                parsed = _dt.datetime.fromisoformat(s)
+            except Exception:
+                try:
+                    parsed = _dt.datetime.strptime(s, fmt)
+                except Exception:
+                    for f in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y"):
+                        try:
+                            parsed = _dt.datetime.strptime(s, f)
+                            break
+                        except Exception:
+                            parsed = None
+            if parsed:
+                v = parsed.strftime(fmt)
+            continue
+
         if t == "suffix":
             v = f"{v}{op.get('value','')}"
             continue
