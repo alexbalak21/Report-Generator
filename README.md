@@ -61,6 +61,24 @@ python app/app.py
 
 ---
 
+## Testing
+
+```powershell
+# Activate the virtual environment first
+.\env\Scripts\Activate.ps1
+python -m pytest
+```
+
+If the virtual environment is not yet installed, run:
+
+```powershell
+python -m venv env
+.\env\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+---
+
 ## Project structure
 
 ```text
