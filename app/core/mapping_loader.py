@@ -117,12 +117,18 @@ class MappingLoader:
         with open(self.mapping_path, "r", encoding="utf-8") as f:
             return json.load(f)
 
+    def _find_sheet(self, workbook, sheet_name: str):
+        for name in workbook.sheetnames:
+            if name.lower() == sheet_name.lower():
+                return workbook[name]
+        return None
+
     def _load_xlsx(self) -> dict:
         workbook = openpyxl.load_workbook(self.mapping_path, data_only=True)
-        if _MAPPINGS_SHEET not in workbook.sheetnames:
+        sheet = self._find_sheet(workbook, _MAPPINGS_SHEET)
+        if sheet is None:
             raise ValueError(f"Workbook must contain a '{_MAPPINGS_SHEET}' sheet.")
 
-        sheet = workbook[_MAPPINGS_SHEET]
         rows = list(sheet.iter_rows(values_only=True))
         if not rows:
             return {}
@@ -181,14 +187,25 @@ class MappingLoader:
     def _load_xlsx_config(self, workbook) -> dict:
         config_sheet = None
         for candidate in _CONFIG_SHEETS:
-            if candidate in workbook.sheetnames:
-                config_sheet = workbook[candidate]
+            config_sheet = self._find_sheet(workbook, candidate)
+            if config_sheet is not None:
                 break
         if config_sheet is None:
             return {}
 
+        rows = list(config_sheet.iter_rows(values_only=True))
+        if not rows:
+            return {}
+
+        start_index = 0
+        first_row = rows[0]
+        first_key = self._normalize_header(first_row[0]).lower() if first_row and first_row[0] is not None else ""
+        first_value = self._normalize_header(first_row[1]).lower() if first_row and len(first_row) > 1 and first_row[1] is not None else ""
+        if first_key in {"key", "name"} and first_value in {"value", "val"}:
+            start_index = 1
+
         config = {}
-        for row in config_sheet.iter_rows(values_only=True):
+        for row in rows[start_index:]:
             if not row or row[0] is None:
                 continue
             key = str(row[0]).strip()

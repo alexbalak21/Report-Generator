@@ -186,6 +186,36 @@ class TestReportGenerator(unittest.TestCase):
         fn = loader.load_file_name_field()
         self.assertEqual(fn.get("name"), "NOVOCIB Rapport d'essai {numero_rapport}")
 
+    def test_load_config_from_xlsx_config_sheet_with_header(self):
+        if MappingLoader is None:
+            self.skipTest("MappingLoader unavailable")
+
+        mapping_xlsx_path = os.path.join(self.temp_dir, "mapping.xlsx")
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "mappings"
+        ws.append(["Spreadsheet Column", "Placeholder", "Operation", "Type", "Notes"])
+        ws.append(["date rapport", "{{date_rapport}}", "", "date (input)", ""])
+        ws.append(["(computed) numero_rapport", "—", "report_number (date_column: date rapport; sample_column: numero echantillon)", "computed", ""])
+
+        config = wb.create_sheet("config")
+        config.append(["Key", "Value"])
+        config.append(["data_file", self.xlsx_path])
+        config.append(["template_file", self.template_path])
+        config.append(["output_dir", self.temp_dir])
+        config.append(["date_format", "%d/%m/%Y"])
+        wb.save(mapping_xlsx_path)
+
+        loader = MappingLoader(mapping_xlsx_path)
+        cfg = loader.load_config()
+
+        self.assertEqual(cfg, {
+            "data_file": self.xlsx_path,
+            "template_file": self.template_path,
+            "output_dir": self.temp_dir,
+            "date_format": "%d/%m/%Y",
+        })
+
 
 if __name__ == "__main__":
     unittest.main()
