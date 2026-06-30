@@ -1,4 +1,5 @@
 import datetime
+import re
 import unittest
 import tempfile
 import os
@@ -11,9 +12,15 @@ except Exception:
 try:
     from app.core.report_generator import ReportGenerator
     from app.core.mapping_loader import MappingLoader
+    from app.core.word_processor import WordProcessor
+    from app.core.excel_reader import ExcelReader
+    import app.repository.config_repository as config_repository
 except Exception:
     ReportGenerator = None
     MappingLoader = None
+    WordProcessor = None
+    ExcelReader = None
+    config_repository = None
 import json
 
 
@@ -215,6 +222,91 @@ class TestReportGenerator(unittest.TestCase):
             "output_dir": self.temp_dir,
             "date_format": "%d/%m/%Y",
         })
+
+    def test_mapping_registry_persists_mapping_path(self):
+        if config_repository is None:
+            self.skipTest("config_repository unavailable")
+
+        config_repository.DB_PATH = os.path.join(self.temp_dir, "app_data.db")
+        mapping_path = os.path.join(self.temp_dir, "mapping.xlsx")
+        with open(mapping_path, "w", encoding="utf-8") as f:
+            f.write("dummy")
+
+        first_id = config_repository.mapping_add(mapping_path)
+        self.assertGreater(first_id, 0)
+
+        second_id = config_repository.mapping_add(mapping_path)
+        self.assertEqual(first_id, second_id)
+
+        items = config_repository.mapping_list()
+        self.assertEqual(items, [(first_id, mapping_path)])
+
+    def test_last_mapping_placeholder_column_comparison(self):
+        if config_repository is None or WordProcessor is None or ExcelReader is None:
+            self.skipTest("Required components unavailable")
+
+        config_repository.DB_PATH = os.path.join(self.temp_dir, "app_data.db")
+        mapping_path = os.path.join(self.temp_dir, "mapping.xlsx")
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "mappings"
+        ws.append(["Spreadsheet Column", "Placeholder", "Operation", "Type", "Notes"])
+        ws.append(["date rapport", "{{date_rapport}}", "", "date (input)", ""])
+        ws.append(["temperature reception", "{{temperature_reception}}", "", "text (input)", ""])
+        ws.append(["numero rapport", "{{numero_rapport}}", "", "text (input)", ""])
+        ws.append(["numero echantillon", "{{numero_echantillon}}", "", "text (input)", ""])
+
+        config = wb.create_sheet("config")
+        config.append(["Key", "Value"])
+        config.append(["data_file", self.xlsx_path])
+        config.append(["template_file", self.template_path])
+        config.append(["output_dir", self.temp_dir])
+        config.append(["date_format", "%d/%m/%Y"])
+        wb.save(mapping_path)
+
+        config_repository.mapping_add(mapping_path)
+        last_mapping = config_repository.mapping_get_last()
+        self.assertEqual(last_mapping, mapping_path)
+
+        word = WordProcessor(self.template_path)
+        placeholders = set(word.extract_placeholders())
+
+        excel = ExcelReader(self.xlsx_path)
+        excel.load()
+        columns = {col.strip() for col in excel.get_columns()}
+
+        mapping = MappingLoader(last_mapping).load()
+        mapping_placeholders = set()
+        mapping_columns = set()
+        for key, rule in mapping.items():
+            if isinstance(rule, dict):
+                if "column" in rule:
+                    mapping_columns.add(str(rule.get("column", "")).strip())
+                placeholder = rule.get("placeholder")
+                if isinstance(placeholder, str):
+                    match = re.search(r"\{\{(.*?)\}\}", placeholder)
+                    if match:
+                        mapping_placeholders.add(match.group(1).strip())
+                elif key not in {"file_name"}:
+                    mapping_placeholders.add(key)
+
+        missing_placeholders = placeholders - mapping_placeholders
+        missing_columns = mapping_columns - columns
+        extra_placeholders = mapping_placeholders - placeholders
+
+        self.assertFalse(
+            missing_placeholders,
+            f"Missing placeholder mappings for template placeholders: {sorted(missing_placeholders)}"
+        )
+        self.assertFalse(
+            missing_columns,
+            f"Mapped Excel columns missing from spreadsheet: {sorted(missing_columns)}"
+        )
+        self.assertFalse(
+            extra_placeholders,
+            f"Mapped placeholders not found in Word template: {sorted(extra_placeholders)}"
+        )
 
 
 if __name__ == "__main__":

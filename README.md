@@ -1,223 +1,237 @@
-  # Rapport-Generator
+# Rapport-Generator
 
-  A desktop application for generating Word `.docx` reports from Excel data, driven by JSON mapping configurations and a Tkinter GUI. All report-state and UI state are persisted in a local SQLite database; mappings remain editable JSON.
+A desktop application for generating Word `.docx` reports from Excel data, driven by JSON or XLSX mapping configurations and a Tkinter GUI. All report-state and UI state are persisted in a local SQLite database.
 
-  ---
+---
 
-  ## Features
+## Features
 
-  - Select a mapping file, Excel data file, and Word template from the GUI
-  - Selecting a mapping auto-fills the Excel and template paths from its `config` block
-  - Manually overriding Excel or template paths writes the change back into the mapping JSON
-  - Generate reports with a **Save As** dialog — pre-filled with the suggested folder and filename
-  - The chosen output folder is persisted to both the mapping JSON and SQLite for next time
-  - Support for multiple mapping configurations (one per report type / template)
-  - Computed fields: today's date, uppercase/lowercase, string formatting, concatenation, auto-incrementing report numbers
-  - New JSON-driven field transformations: numeric scaling, rounding, date formatting, suffix/prefix, and formula evaluation from Excel
-  - Report counter stored in SQLite — no `report_state.json` file; auto-migrated from JSON on first run if one exists
-  - Full audit trail: every generated report is logged to SQLite
-  - All GUI state (paths, last row) restored automatically on next launch
+- Select a mapping file, Excel data file, and Word template from the GUI
+- Supports mapping files in both `.json` and `.xlsx` formats
+- `.xlsx` mappings use a `mappings` sheet and may include an optional `config` or `_config` sheet
+- Selecting a mapping auto-fills the Excel and template paths from its `config` block
+- Manually overriding Excel or template paths writes the change back into the mapping file
+- Generate reports with a **Save As** dialog — pre-filled with the suggested folder and filename
+- The chosen output folder is persisted to both the mapping file and SQLite for next time
+- Support for multiple mapping configurations (one per report type / template)
+- Computed fields: today's date, uppercase/lowercase, string formatting, concatenation, auto-incrementing report numbers
+- New field transformations: numeric scaling, rounding, date formatting, suffix/prefix, and Excel formula evaluation
+- Report counter stored in SQLite and auto-migrated from legacy `report_state.json` if present
+- Mapping paths are registered in SQLite so the last used mapping is known and can be reused
+- Full audit trail: every generated report is logged to SQLite
+- All GUI state (paths, last row) restored automatically on next launch
 
-  ---
+---
 
-  ## Requirements
+## Requirements
 
-  - Python 3.10+
+- Python 3.10+
 
-  ```
-  et_xmlfile==2.0.0
-  lxml==6.1.1
-  openpyxl==3.1.5
-  python-docx==1.2.0
-  typing_extensions==4.15.0
-  ```
+```text
+et_xmlfile==2.0.0
+lxml==6.1.1
+openpyxl==3.1.5
+python-docx==1.2.0
+typing_extensions==4.15.0
+```
 
-  ---
+---
 
-  ## Installation
+## Installation
 
-  ```powershell
-  python -m venv env
-  .\env\Scripts\Activate.ps1
-  pip install -r requirements.txt
-  ```
+```powershell
+python -m venv env
+.\env\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
-  ---
+---
 
-  ## Running
+## Running
 
-  ```powershell
-  python run.py
-  ```
+```powershell
+python run.py
+```
 
-  Or directly:
+Or directly:
 
-  ```powershell
-  python app/app.py
-  ```
+```powershell
+python app/app.py
+```
 
-  ---
+---
 
-  ## Project structure
+## Project structure
 
-  ```
-  Rapport-Generator/
-  ├── run.py                              # Convenience entry point
-  ├── requirements.txt
-  ├── app_data.db                         # SQLite database (auto-created on first run)
-  └── app/
-      ├── app.py                          # Application entry point
-      ├── core/
-      │   ├── excel_reader.py             # Reads rows from .xlsx
-      │   ├── mapping_loader.py           # Loads, queries, and updates mapping.json
-      │   ├── processors.py               # Built-in field operations (today, format, …)
-      │   ├── report_generator.py         # Orchestrates report creation
-      │   ├── state_manager.py            # Report number counter (SQLite-backed)
-      │   └── word_processor.py           # Fills {{placeholders}} in .docx templates
-      ├── gui/
-      │   ├── config_persistence.py       # GUI state save/restore via SQLite
-      │   ├── file_dialogs.py             # File picker and Save As helpers
-      │   ├── line_selector.py            # [ − ] [ row ] [ + ] widget
-      │   ├── main_window.py              # Main Tkinter window — layout and wiring only
-      │   └── report_actions.py           # Generation logic and output path resolution
-      ├── mappings/
-      │   └── data.json                   # Default mapping configuration
-      └── repository/
-          ├── config_repository.py        # SQLite key/value store for GUI config
-          └── rapport_repository.py       # SQLite report log + report state
-  ```
+```text
+Rapport-Generator/
+├── run.py                              # Convenience entry point
+├── requirements.txt
+├── app_data.db                         # SQLite database (auto-created on first run)
+└── app/
+    ├── app.py                          # Application entry point
+    ├── core/
+    │   ├── excel_reader.py             # Reads rows from .xlsx
+    │   ├── mapping_loader.py           # Loads and updates .json/.xlsx mappings
+    │   ├── processors.py               # Built-in field operations
+    │   ├── report_generator.py         # Orchestrates report creation
+    │   ├── state_manager.py            # Report counter migration and generation
+    │   └── word_processor.py           # Fills {{placeholders}} in .docx templates
+    ├── gui/
+    │   ├── config_persistence.py       # GUI state save/restore via SQLite
+    │   ├── file_dialogs.py             # File picker and Save As helpers
+    │   ├── line_selector.py            # [ − ] [ row ] [ + ] widget
+    │   ├── main_window.py              # Main Tkinter window layout and wiring
+    │   └── report_actions.py           # Generation logic and output path resolution
+    └── repository/
+        ├── config_repository.py        # SQLite GUI config + mappings registry
+        └── rapport_repository.py       # SQLite report log + state
+```
 
-  ---
+---
 
-  ## GUI workflow
+## GUI workflow
 
-  ### On launch
-  1. Last mapping is restored → its `config` block auto-fills the Excel and template paths
-  2. Last row number is restored as `last_row + 1`
-  3. Last output folder is remembered for the Save As dialog
+### On launch
+1. Last mapping is restored → its `config` block auto-fills the Excel and template paths
+2. Last row number is restored as `last_line_number + 1`
+3. Last output folder is remembered for the Save As dialog
 
-  ### Generating a report
-  1. Select a **mapping file** → Excel and template paths are filled automatically
-  2. Adjust the **row number** with `[ − ]` / `[ + ]` or type directly
-  3. Click **Generate report**
-  4. A **Save As** dialog opens, pre-filled with the suggested folder and filename
-  5. Confirm or change the location → report is saved there
-  6. If the output folder changed, it is written back to both the mapping JSON and SQLite
-  7. Row number auto-increments for the next report
+### Generating a report
+1. Select a **mapping file** → Excel and template paths are filled automatically
+2. Adjust the **row number** with `[ − ]` / `[ + ]` or type directly
+3. Click **Generate report**
+4. A **Save As** dialog opens, pre-filled with the suggested folder and filename
+5. Confirm or change the location → report is saved there
+6. If the output folder changed, it is written back to both the mapping file and SQLite
+7. Row number auto-increments for the next report
 
-  ---
+---
 
-  ## Mapping configuration (`mapping.json`)
+## Mapping configuration (`mapping.json` / `mapping.xlsx`)
 
-  Each mapping file ties together one Excel table, one Word template, one output folder, and a set of field rules. Selecting a mapping in the GUI is the only step needed to switch report types.
+Each mapping file ties together one Excel table, one Word template, one output folder, and a set of field rules. Selecting a mapping in the GUI is the only step needed to switch report types.
 
-  ### Full structure
+### Full structure
 
-  ```json
-  {
-    "config": {
-      "data_file":     "C:/Reports/table.xlsx",
-      "template_file": "C:/Reports/template.docx",
-      "output_dir":    "C:/Reports/Output"
-    },
-
-    "date":      "{{date}}",
-    "species":   "{{species}}",
-    "address":   "{{address}}",
-    "inspector": "{{inspector}}",
-    "notes":     "{{notes}}",
-    "product":   "{{product}}",
-
-    "today_date": {
-      "operation": "today",
-      "format": "%d/%m/%Y"
-    },
-    "species_upper": {
-      "operation": "uppercase",
-      "input": "species"
-    },
-    "full_line": {
-      "operation": "format",
-      "format": "{species} inspected on {date}"
-    },
-    "report_number": {
-      "operation": "report_number"
-    },
-    "file_name": {
-      "operation": "format",
-      "format": "{species}_{date}_{report_number}.docx"
-    }
-  }
-  ```
-
-  ### `config` block
-
-  | Key             | Description                                          |
-  |-----------------|------------------------------------------------------|
-  | `data_file`     | Path to the Excel `.xlsx` data file                  |
-  | `template_file` | Path to the Word `.docx` template                    |
-  | `output_dir`    | Default output folder for the Save As dialog         |
-
-  All three are updated automatically when the user selects different files or a different output folder in the GUI.
-
-  ### Simple column mapping
-
-  Maps an Excel column header to a `{{placeholder}}` in the Word template:
-
-  ```json
-  "species": "{{species}}"
-  ```
-
-  The key must match the Excel column header exactly (case-sensitive, trimmed).
-
-  ### Column mapping with operations
-
-  The new JSON format also supports a richer, data-driven mapping object for fields that need transformation before insertion into the document.
-
-  ```json
-  "imp": {
-    "column": "imp",
-    "placeholder": "{{imp}}",
-    "operations": [
-      { "type": "formula" },
-      { "type": "multiply", "value": 100 },
-      { "type": "round", "decimals": 0 },
-      { "type": "suffix", "value": "%" }
-    ]
+```json
+{
+  "config": {
+    "data_file":     "C:/Reports/table.xlsx",
+    "template_file": "C:/Reports/template.docx",
+    "output_dir":    "C:/Reports/Output"
   },
-  "k value": {
-    "column": "k value",
-    "placeholder": "{{k_value}}",
-    "operations": [
-      { "type": "formula" },
-      { "type": "multiply", "value": 100 },
-      { "type": "round", "decimals": 0 },
-      { "type": "suffix", "value": "%" }
-    ]
+
+  "date":      "{{date}}",
+  "species":   "{{species}}",
+  "address":   "{{address}}",
+  "inspector": "{{inspector}}",
+  "notes":     "{{notes}}",
+  "product":   "{{product}}",
+
+  "today_date": {
+    "operation": "today",
+    "format": "%d/%m/%Y"
+  },
+  "species_upper": {
+    "operation": "uppercase",
+    "input": "species"
+  },
+  "full_line": {
+    "operation": "format",
+    "format": "{species} inspected on {date}"
+  },
+  "report_number": {
+    "operation": "report_number"
+  },
+  "file_name": {
+    "operation": "format",
+    "format": "{species}_{date}_{report_number}.docx"
   }
-  ```
+}
+```
 
-  In this format:
-  - `column` is the Excel header name
-  - `placeholder` is the template token written in the Word document
-  - `operations` is an ordered list of transformations applied to the value
+### `config` block
 
-  Use this for any future column that needs a calculation, formatting step, or formula-based value.
+| Key             | Description                                          |
+|-----------------|------------------------------------------------------|
+| `data_file`     | Path to the Excel `.xlsx` data file                  |
+| `template_file` | Path to the Word `.docx` template                    |
+| `output_dir`    | Default output folder for the Save As dialog         |
 
-  ### Computed fields
+All three are updated automatically when the user selects different files or a different output folder in the GUI.
 
-  ```json
-  "field_name": {
-    "operation": "<operation_name>",
-    ...options...
-  }
-  ```
+### JSON mapping files
 
-  The key becomes the placeholder name (`{{field_name}}`).
+Use a JSON file when you want a plain text mapping configuration.
 
-  ---
+### XLSX mapping files
 
-  ## Supported computed-field operations
+XLSX mappings must include a sheet named `mappings`.
+The first row must define headers such as `Spreadsheet Column`, `Placeholder`, and `Operation`.
+Computed rows start with `(computed)` in the `Spreadsheet Column` cell.
+
+A `.xlsx` mapping can also include a `config` or `_config` sheet with key/value pairs.
+That sheet may define the same `data_file`, `template_file`, `output_dir`, and additional metadata.
+
+### Simple column mapping
+
+Maps an Excel column header to a `{{placeholder}}` in the Word template:
+
+```json
+"species": "{{species}}"
+```
+
+The key must match the Excel column header exactly (case-sensitive, trimmed).
+
+### Column mapping with operations
+
+Use transformation rules for fields that need processing before insertion into the document.
+
+```json
+"imp": {
+  "column": "imp",
+  "placeholder": "{{imp}}",
+  "operations": [
+    { "type": "formula" },
+    { "type": "multiply", "value": 100 },
+    { "type": "round", "decimals": 0 },
+    { "type": "suffix", "value": "%" }
+  ]
+},
+"k value": {
+  "column": "k value",
+  "placeholder": "{{k_value}}",
+  "operations": [
+    { "type": "formula" },
+    { "type": "multiply", "value": 100 },
+    { "type": "round", "decimals": 0 },
+    { "type": "suffix", "value": "%" }
+  ]
+}
+```
+
+In this format:
+- `column` is the Excel header name
+- `placeholder` is the template token written in the Word document
+- `operations` is an ordered list of transformations applied to the value
+
+Use this for any future column that needs a calculation, formatting step, or formula-based value.
+
+### Computed fields
+
+```json
+"field_name": {
+  "operation": "<operation_name>",
+  ...options...
+}
+```
+
+The key becomes the placeholder name (`{{field_name}}`).
+
+---
+
+## Supported computed-field operations
 
   | Operation         | Description                                                                     | Parameters                                    |
   |-------------------|---------------------------------------------------------------------------------|-----------------------------------------------|
@@ -285,7 +299,7 @@
 
   Any placeholder not matched by the mapping is left unchanged.
 
-  Note: the app also aliases `numero_rapport` to `{{numéro_rapport}}` so templates can use either spelling.
+  Note: the app also populates `{{numéro_rapport}}` and `{{sample_number}}` with the generated report number.
 
   ---
 
@@ -304,30 +318,41 @@
   Place mapping files anywhere and name them freely:
 
   ```
-  mappings/
+  my-mappings/
       animals.json
-      inspection.json
+      inspection.xlsx
       vehicles.json
-      custom.json
+      custom.xlsx
   ```
 
-  Click **Select mapping.json** in the GUI to switch between them. The last selected mapping is remembered across sessions.
+  Click **Select mapping file** in the GUI to switch between them. The last selected mapping is remembered across sessions and tracked in SQLite.
 
   ---
 
   ## SQLite database (`app_data.db`)
 
-  Created automatically in the project root on first run. Contains three tables:
+  Created automatically in the project root on first run. Contains four tables:
 
   ### `config` — GUI persistent state
 
-  | Key                 | Description                                  |
-  |---------------------|----------------------------------------------|
-  | `last_excel_path`   | Last selected `.xlsx` path                   |
-  | `last_docx_path`    | Last selected `.docx` template path          |
-  | `last_mapping_path` | Last selected mapping `.json` path           |
-  | `last_line_number`  | Last used row number                         |
-  | `last_output_dir`   | Last output folder chosen in Save As         |
+  | Key                | Description                                      |
+  |--------------------|--------------------------------------------------|
+  | `last_excel_path`  | Last selected `.xlsx` path                       |
+  | `last_docx_path`   | Last selected `.docx` template path              |
+  | `mapping_path`     | Last selected mapping file path                  |
+  | `last_line_number` | Last used row number                             |
+  | `last_output_dir`  | Last output folder chosen in Save As             |
+
+  > Legacy compatibility: `last_mapping_path` is still read when present, but `mapping_path` is the preferred key.
+
+  ### `mappings` — mapping file registry
+
+  | Column         | Description                |
+  |----------------|----------------------------|
+  | `id`           | Auto-increment identifier  |
+  | `mapping_path` | Stored mapping file path   |
+
+  This table tracks all mappings selected through the GUI.
 
   ### `reports` — audit log
 
@@ -335,9 +360,9 @@
   |-----------------|---------|---------------------------------------|
   | `id`            | TEXT    | Unique ID (`row_N_YYYYMMDDHHMMSS`)    |
   | `created_at`    | TEXT    | ISO 8601 timestamp                    |
-  | `excel_path`    | TEXT    |                                       |
-  | `template_path` | TEXT    |                                       |
-  | `mapping_path`  | TEXT    |                                       |
+  | `excel_path`    | TEXT    | Path to the Excel source              |
+  | `template_path` | TEXT    | Path to the Word template             |
+  | `mapping_path`  | TEXT    | Path to the mapping file              |
   | `row_number`    | INTEGER | Excel row used                        |
   | `data_json`     | TEXT    | Full data snapshot (JSON)             |
 
@@ -391,7 +416,7 @@
   *.db
   *.sqlite
   report_row_*.docx
-  app/mappings/report_state.json
+  report_state.json
   .DS_Store
   Thumbs.db
   .vscode/
