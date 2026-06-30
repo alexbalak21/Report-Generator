@@ -10,8 +10,10 @@ except Exception:
     Document = None
 try:
     from app.core.report_generator import ReportGenerator
+    from app.core.mapping_loader import MappingLoader
 except Exception:
     ReportGenerator = None
+    MappingLoader = None
 import json
 
 
@@ -133,6 +135,39 @@ class TestReportGenerator(unittest.TestCase):
         self.assertIn("26%", text)
         self.assertIn("31/05/2026", text)
         self.assertIn("14/06/2026", text)
+        self.assertIn("260621-1", text)
+
+    def test_report_generation_with_xlsx_mapping(self):
+        if MappingLoader is None:
+            self.skipTest("MappingLoader unavailable")
+
+        mapping_xlsx_path = os.path.join(self.temp_dir, "mapping.xlsx")
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "mappings"
+        ws.append(["Spreadsheet Column", "Placeholder", "Operation", "Type", "Notes"])
+        ws.append(["date rapport", "{{date_rapport}}", "", "date (input)", ""])
+        ws.append(["temperature reception", "{{temperature_reception}}", "", "text (input)", ""])
+        ws.append(["date emabalage", "{{date_emabalage}}", "date_format %d/%m/%Y", "date", ""])
+        ws.append(["dlc", "{{dlc}}", "date_format %d/%m/%Y", "date", ""])
+        ws.append(["numero echantillon", "{{numero_echantillon}}", "", "text/number (input)", ""])
+        ws.append(["(computed) numero_rapport", "—", "report_number (date_column: date rapport; sample_column: numero echantillon)", "computed", ""])
+        ws.append(["(computed) file_name", "—", "format(\"{name} {numero_rapport}.docx\")", "computed", ""])
+        wb.save(mapping_xlsx_path)
+
+        loader = MappingLoader(mapping_xlsx_path)
+        loader.update_file_name_field(name="TEST")
+        loaded = loader.load()
+        self.assertEqual(loaded["file_name"]["name"], "TEST")
+        self.assertEqual(loaded["file_name"]["operation"], "format")
+
+        output = ReportGenerator(self.xlsx_path, self.template_path, mapping_xlsx_path).generate(2, self.output_path)
+        self.assertEqual(output, self.output_path)
+
+        doc = Document(output)
+        text = "\n".join(p.text for p in doc.paragraphs)
+        self.assertIn("21/06/2026", text)
+        self.assertIn("4°C", text)
         self.assertIn("260621-1", text)
 
 

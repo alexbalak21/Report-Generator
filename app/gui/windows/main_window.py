@@ -60,7 +60,7 @@ class MainWindow(tk.Tk):
         ttk.Label(self, text="Report Generator", font=("Arial", 16, "bold")).pack(pady=(14, 8))
 
         self._path_row(
-            "Mapping (.json)", "Select…", self.on_select_mapping, self.mapping_path,
+            "Mapping file", "Select…", self.on_select_mapping, self.mapping_path,
             open_cmd=lambda: self._open_file(self.mapping_path.get()),
         )
         self._path_row(

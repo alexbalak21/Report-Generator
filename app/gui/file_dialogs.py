@@ -19,10 +19,10 @@ def select_docx_template() -> str:
 
 
 def select_mapping_file() -> str:
-    """Open a file dialog to select a JSON mapping/configuration file."""
+    """Open a file dialog to select a mapping file (.json or .xlsx)."""
     return filedialog.askopenfilename(
-        title="Select Mapping Configuration File",
-        filetypes=[("JSON Files", "*.json")],
+        title="Select Mapping File",
+        filetypes=[("Mapping Files", "*.json *.xlsx")],
     )
 
 
