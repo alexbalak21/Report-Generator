@@ -47,6 +47,9 @@ class MainWindow(tk.Tk):
         self.report_name   = tk.StringVar()
         self.line_number   = tk.IntVar(value=2)
 
+        self._auto_generated_report_name = False
+        self._internal_report_name_update = False
+
         self._state_mgr = ReportStateManager(_STATE_PATH)
 
         self._build_ui()
@@ -77,8 +80,8 @@ class MainWindow(tk.Tk):
         ttk.Separator(self, orient="horizontal").pack(fill="x", padx=14, pady=10)
 
         LineSelector(self, variable=self.line_number).pack(padx=14, pady=4)
-        # Recompute preview whenever line changes
-        self.line_number.trace_add("write", lambda *_: self._update_preview())
+        # Recompute report name and preview whenever line changes
+        self.line_number.trace_add("write", lambda *_: self._on_line_number_changed())
 
         ttk.Separator(self, orient="horizontal").pack(fill="x", padx=14, pady=10)
 
@@ -130,14 +133,33 @@ class MainWindow(tk.Tk):
             subprocess.Popen(["xdg-open", path])
 
     def _on_report_name_changed(self, *_):
+        if self._internal_report_name_update:
+            self._internal_report_name_update = False
+            return
+
+        self._auto_generated_report_name = False
         mapping = self.mapping_path.get()
         if not mapping:
+            self._update_preview()
             return
         try:
             MappingLoader(mapping).update_file_name_field(name=self.report_name.get())
         except Exception:
             pass
         self._update_preview()
+
+    def _on_line_number_changed(self):
+        if self._auto_generated_report_name:
+            mapping = self.mapping_path.get()
+            if mapping:
+                new_name = self._resolve_mapping_name(mapping)
+                if new_name:
+                    self._set_report_name(new_name)
+        self._update_preview()
+
+    def _set_report_name(self, name: str):
+        self._internal_report_name_update = True
+        self.report_name.set(name)
 
     # ------------------------------------------------------------------
     # Preview — computed from Excel using the selected row
@@ -189,9 +211,12 @@ class MainWindow(tk.Tk):
     def _update_preview(self):
         try:
             numero = self._compute_numero_rapport()
-            name   = self.report_name.get().strip()
+            name = self.report_name.get().strip()
             if numero:
-                display = f"{name} {numero}".strip() if name else numero
+                if name and name.endswith(f" {numero}"):
+                    display = name
+                else:
+                    display = f"{name} {numero}".strip() if name else numero
             else:
                 display = "—"
             self._preview_label.config(text=f"Report number: {display}")
@@ -272,14 +297,39 @@ class MainWindow(tk.Tk):
         if cfg.get("output_dir"):
             self.output_dir.set(cfg["output_dir"])
 
-        # Load report name from file_name.name
+        # Load report name from file_name.name or from the resolved mapping file_name.
         try:
             fn = MappingLoader(mapping_path).load_file_name_field()
             name = fn.get("name", "")
-            if name:
-                self.report_name.set(name)
+            resolved_name = ""
+            if not name or ("{" in name and "}" in name):
+                resolved_name = self._resolve_mapping_name(mapping_path)
+
+            if resolved_name:
+                self._auto_generated_report_name = True
+                self._set_report_name(resolved_name)
+            elif name:
+                self._auto_generated_report_name = False
+                self._set_report_name(name)
+            else:
+                self._auto_generated_report_name = False
         except Exception:
+            self._auto_generated_report_name = False
             pass
+
+    def _resolve_mapping_name(self, mapping_path: str) -> str:
+        excel_path = self.excel_path.get()
+        template_path = self.template_path.get()
+        row_number = self.line_number.get()
+        if not excel_path or not template_path or row_number < 2:
+            return ""
+        try:
+            _, filename = resolve_output_path(mapping_path, excel_path, template_path, row_number)
+            if filename.lower().endswith(".docx"):
+                filename = filename[:-5]
+            return filename
+        except Exception:
+            return ""
 
     def _update_mapping_config(self, **kwargs):
         mapping = self.mapping_path.get()

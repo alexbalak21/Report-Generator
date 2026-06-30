@@ -170,6 +170,22 @@ class TestReportGenerator(unittest.TestCase):
         self.assertIn("4°C", text)
         self.assertIn("260621-1", text)
 
+    def test_load_file_name_name_from_xlsx_format_rule(self):
+        if MappingLoader is None:
+            self.skipTest("MappingLoader unavailable")
+
+        mapping_xlsx_path = os.path.join(self.temp_dir, "mapping.xlsx")
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "mappings"
+        ws.append(["Spreadsheet Column", "Placeholder", "Operation", "Type", "Notes"])
+        ws.append(["(computed) file_name", "—", "format(\"NOVOCIB Rapport d'essai {numero_rapport}.docx\")", "computed", ""])
+        wb.save(mapping_xlsx_path)
+
+        loader = MappingLoader(mapping_xlsx_path)
+        fn = loader.load_file_name_field()
+        self.assertEqual(fn.get("name"), "NOVOCIB Rapport d'essai {numero_rapport}")
+
 
 if __name__ == "__main__":
     unittest.main()

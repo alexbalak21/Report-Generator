@@ -23,6 +23,10 @@ class MappingLoader:
         if "file_name" in rules and isinstance(rules["file_name"], dict):
             if isinstance(config, dict) and "name" in config:
                 rules["file_name"] = {**rules["file_name"], "name": config["name"]}
+            else:
+                derived_name = self._derive_file_name_name(rules["file_name"])
+                if derived_name:
+                    rules["file_name"] = {**rules["file_name"], "name": derived_name}
         return rules
 
     def load_config(self) -> dict:
@@ -70,7 +74,25 @@ class MappingLoader:
             return {}
         if isinstance(raw.get("config"), dict) and "name" in raw["config"]:
             return {**file_name, "name": raw["config"]["name"]}
+        derived_name = self._derive_file_name_name(file_name)
+        if derived_name:
+            return {**file_name, "name": derived_name}
         return file_name
+
+    def _derive_file_name_name(self, file_name_rule: dict) -> str | None:
+        if not isinstance(file_name_rule, dict):
+            return None
+        if file_name_rule.get("operation") != "format":
+            return None
+        fmt = file_name_rule.get("format")
+        if not isinstance(fmt, str):
+            return None
+        if "{name}" in fmt:
+            return None
+        name = fmt
+        if name.lower().endswith(".docx"):
+            name = name[:-5]
+        return name.strip()
 
     def _load_raw(self) -> dict:
         if self._extension == ".json":
