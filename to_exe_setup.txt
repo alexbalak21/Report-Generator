@@ -1,0 +1,5 @@
+# 1. Build the exe folder
+pyinstaller run.spec
+
+# 2. Build the installer
+"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
