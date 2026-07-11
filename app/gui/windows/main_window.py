@@ -18,7 +18,8 @@ from app.gui.file_dialogs import (
 )
 from app.gui.line_selector import LineSelector
 from app.gui.config_persistence import (
-    restore_config, save_config, save_mapping_path, load_mapping_config, save_output_dir,
+    restore_config, save_config, save_mapping_path, load_mapping_config,
+    save_output_dir, list_mapping_paths,
 )
 from app.gui.report_actions import resolve_output_path, generate_report
 from app.gui.windows.generation_complete_dialog import GenerationCompleteDialog
@@ -43,6 +44,7 @@ class MainWindow(tk.Tk):
         self.excel_path    = tk.StringVar()
         self.template_path = tk.StringVar()
         self.mapping_path  = tk.StringVar()
+        self.mapping_options = []
         self.output_dir    = tk.StringVar()
         self.report_name   = tk.StringVar()
         self.line_number   = tk.IntVar(value=2)
@@ -62,10 +64,7 @@ class MainWindow(tk.Tk):
     def _build_ui(self):
         ttk.Label(self, text="Report Generator", font=("Arial", 16, "bold")).pack(pady=(14, 8))
 
-        self._path_row(
-            "Mapping file", "Select…", self.on_select_mapping, self.mapping_path,
-            open_cmd=lambda: self._open_file(self.mapping_path.get()),
-        )
+        self._mapping_row()
         self._path_row(
             "Data file (.xlsx)", "Select…", self.on_select_excel, self.excel_path,
             open_cmd=lambda: self._open_file(self.excel_path.get()),
@@ -104,6 +103,41 @@ class MainWindow(tk.Tk):
                   wraplength=260, anchor="w").pack(side="left", fill="x", expand=True)
         ttk.Button(frame, text="📂 Open", command=open_cmd, width=10,
                    state="normal" if open_cmd else "disabled").pack(side="left", padx=(8, 0))
+
+    def _refresh_mapping_options(self):
+        self.mapping_options = list_mapping_paths()
+        current_mapping = self.mapping_path.get().strip()
+        if current_mapping and current_mapping not in self.mapping_options:
+            self.mapping_options.insert(0, current_mapping)
+        if DEFAULT_MAPPING not in self.mapping_options:
+            self.mapping_options.insert(0, DEFAULT_MAPPING)
+        if hasattr(self, "mapping_combobox"):
+            self.mapping_combobox["values"] = self.mapping_options
+
+    def on_select_mapping_profile(self):
+        mapping = self.mapping_path.get().strip()
+        if not mapping:
+            return
+        save_mapping_path(mapping)
+        self._refresh_mapping_options()
+        self._apply_mapping_config(mapping)
+        self._update_preview()
+
+    def _mapping_row(self):
+        frame = ttk.Frame(self)
+        frame.pack(fill="x", padx=14, pady=3)
+        ttk.Label(frame, text="Mapping file", width=18, anchor="w").pack(side="left")
+        self.mapping_combobox = ttk.Combobox(
+            frame,
+            textvariable=self.mapping_path,
+            values=self.mapping_options,
+            width=40,
+            state="readonly",
+        )
+        self.mapping_combobox.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.mapping_combobox.bind("<<ComboboxSelected>>", lambda *_: self.on_select_mapping_profile())
+        ttk.Button(frame, text="Select…", command=self.on_select_mapping, width=10).pack(side="left")
+        ttk.Button(frame, text="📂 Open", command=lambda: self._open_file(self.mapping_path.get()), width=10).pack(side="left", padx=(8, 0))
 
     def _output_row(self):
         frame = ttk.Frame(self)
@@ -233,6 +267,7 @@ class MainWindow(tk.Tk):
 
         mapping = state["mapping"] or DEFAULT_MAPPING
         self.mapping_path.set(mapping)
+        self._refresh_mapping_options()
         self._apply_mapping_config(mapping)
 
         if state["excel"]:
@@ -266,6 +301,7 @@ class MainWindow(tk.Tk):
         if path:
             self.mapping_path.set(path)
             save_mapping_path(path)
+            self._refresh_mapping_options()
             self._apply_mapping_config(path)
             self._update_preview()
 

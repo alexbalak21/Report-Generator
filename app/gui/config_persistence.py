@@ -6,6 +6,7 @@ from app.repository.config_repository import (
     config_get,
     config_set,
     mapping_add,
+    mapping_list,
 )
 
 KEY_EXCEL        = "last_excel_path"
@@ -72,3 +73,11 @@ def load_mapping_config(mapping_path: str) -> dict:
         return MappingLoader(mapping_path).load_config()
     except Exception:
         return {}
+
+
+def list_mapping_paths() -> list[str]:
+    """Return the list of known mapping file paths from the registry."""
+    try:
+        return [path for _, path in mapping_list()]
+    except Exception:
+        return []
