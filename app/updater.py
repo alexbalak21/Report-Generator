@@ -44,32 +44,30 @@ class UpdateDialog(tk.Toplevel):
         self._center(parent)
 
     def _build_ui(self, latest_version: str):
-        pad = {"padx": 24, "pady": 6}
-
         tk.Label(
             self,
             text="A new version is available!",
             font=("Arial", 13, "bold"),
-        ).pack(**pad, pady=(20, 4))
+        ).pack(padx=24, pady=(20, 4))
 
         tk.Label(
             self,
             text=f"v{__version__}  →  v{latest_version}",
             font=("Arial", 11),
             fg="#555",
-        ).pack(**pad)
+        ).pack(padx=24, pady=4)
 
         tk.Label(
             self,
             text="The update will be downloaded and installed automatically.",
             wraplength=320,
-        ).pack(**pad)
+        ).pack(padx=24, pady=4)
 
         self._status = tk.Label(self, text="", fg="#333")
-        self._status.pack(**pad)
+        self._status.pack(padx=24, pady=4)
 
         self._progress = ttk.Progressbar(self, length=320, mode="determinate")
-        self._progress.pack(**pad)
+        self._progress.pack(padx=24, pady=4)
 
         # Buttons row
         btn_frame = tk.Frame(self)
@@ -95,7 +93,7 @@ class UpdateDialog(tk.Toplevel):
             command=self.destroy,
         ).pack(side="left", padx=6)
 
-        # Ignore this version button
+        # Ignore this version link-style button
         tk.Button(
             self,
             text="Ignore this version",
