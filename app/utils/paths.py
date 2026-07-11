@@ -2,19 +2,25 @@ import os
 import sys
 
 
-def _base_dir() -> str:
-    """Root directory: PyInstaller bundle root when frozen, project root in dev."""
+def _exe_dir() -> str:
+    """Directory containing the exe (or project root in dev).
+    Used for files placed there by the installer (e.g. /data folder)."""
     if getattr(sys, "frozen", False):
-        # sys.executable is dist/report-generator/report-generator.exe
         return os.path.dirname(sys.executable)
-    # In dev: this file is app/utils/paths.py → go up two levels to project root
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+def _meipass_dir() -> str:
+    """PyInstaller's temp extraction folder.
+    Used for files declared in run.spec datas[]."""
+    return getattr(sys, "_MEIPASS", _exe_dir())
+
+
 def get_data_path(filename: str) -> str:
-    return os.path.join(_base_dir(), "data", filename)
+    """Files from the /data folder — installed by Inno Setup next to the exe."""
+    return os.path.join(_exe_dir(), "data", filename)
 
 
 def get_resource_path(filename: str) -> str:
-    """For files bundled at the root level (e.g. icon.ico)."""
-    return os.path.join(_base_dir(), filename)
+    """Files bundled via PyInstaller datas[] (e.g. icon.ico)."""
+    return os.path.join(_meipass_dir(), filename)

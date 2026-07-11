@@ -11,7 +11,7 @@ __pycache__/
 # ── Distribution / packaging ───────────────────────────────────────────────────
 dist/
 build/
-installer_output/
+installer_output\
 *.egg-info/
 *.egg
 

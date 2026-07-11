@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from urllib.request import urlopen, Request
 from urllib.error import URLError
+from app.utils.paths import get_resource_path
 
 from app import __version__
 from app.repository.config_repository import config_get, config_set
@@ -34,6 +35,9 @@ class UpdateDialog(tk.Toplevel):
     def __init__(self, parent, latest_version: str, download_url: str):
         super().__init__(parent)
         self.title("Update Available")
+        icon_path = get_resource_path("icon.ico")
+        if os.path.exists(icon_path):
+            self.iconbitmap(icon_path)
         self.resizable(False, False)
         self.grab_set()  # modal
 
