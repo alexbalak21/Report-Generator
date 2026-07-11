@@ -23,6 +23,7 @@ from app.gui.config_persistence import (
 )
 from app.gui.report_actions import resolve_output_path, generate_report
 from app.gui.windows.generation_complete_dialog import GenerationCompleteDialog
+from app.utils.paths import get_resource_path
 
 DEFAULT_MAPPING = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "mappings", "data.json")
@@ -40,6 +41,10 @@ class MainWindow(tk.Tk):
         self.title("Report Generator")
         self.geometry("620x500")
         self.resizable(False, False)
+        icon_path = get_resource_path("icon.ico")
+        if os.path.exists(icon_path):
+            self.iconbitmap(icon_path)
+
 
         self.excel_path    = tk.StringVar()
         self.template_path = tk.StringVar()

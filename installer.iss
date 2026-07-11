@@ -1,13 +1,13 @@
 [Setup]
 AppId={{ED260038-C62C-41D8-BBEA-ED3E5F0D3787}}
 AppName=Report Generator
-AppVersion=1.0.2
-AppPublisher=Your Name
+AppVersion=1.0.1
+AppPublisher=Alex Balak
 DefaultDirName={autopf}\ReportGenerator
 DefaultGroupName=Report Generator
 DisableProgramGroupPage=yes
 OutputDir=installer_output
-OutputBaseFilename=ReportGenerator-Setup-1.0.2
+OutputBaseFilename=ReportGenerator-Setup-1.0.1
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
@@ -18,6 +18,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 Source: "dist\report-generator\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
+Source: "data\*"; DestDir: "{app}\data"; Flags: recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\Report Generator"; Filename: "{app}\report-generator.exe"

@@ -11,10 +11,9 @@ __pycache__/
 # ── Distribution / packaging ───────────────────────────────────────────────────
 dist/
 build/
+installer_output/
 *.egg-info/
 *.egg
-installer_output/
-
 
 # ── SQLite database ────────────────────────────────────────────────────────────
 *.db

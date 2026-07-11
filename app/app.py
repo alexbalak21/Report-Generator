@@ -10,8 +10,8 @@ from app.gui.windows.main_window import MainWindow
 
 
 def main():
-    check_for_updates()
     app = MainWindow()
+    check_for_updates(app)  # pass the window so the dialog can attach to it
     app.mainloop()
 
 

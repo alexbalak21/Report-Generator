@@ -4,7 +4,10 @@ a = Analysis(
     ['run.py'],
     pathex=[],
     binaries=[],
-    datas=[('app/repository/app_data.db', 'app/repository')],
+    datas=[
+        ('app/repository/app_data.db', 'app/repository'),
+        ('icon.ico', '.'),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
