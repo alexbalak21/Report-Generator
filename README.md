@@ -1,210 +1,204 @@
-# Rapport-Generator
+# Report Generator
 
-A desktop application for generating Word `.docx` reports from Excel data, driven by JSON or XLSX mapping configurations and a Tkinter GUI. All report-state and UI state are persisted in a local SQLite database.
+A Windows desktop application that automates the generation of Word reports from Excel data. Select a row from your data file, and the app fills a `.docx` template with the corresponding values and saves the finished report.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [How It Works](#how-it-works)
+- [Installation](#installation)
+- [Project Structure](#project-structure)
+- [Data Files](#data-files)
+- [Mapping File](#mapping-file)
+  - [Column Mapping](#column-mapping)
+  - [Computed Fields](#computed-fields)
+  - [Operations](#operations)
+  - [File Name Rule](#file-name-rule)
+  - [Config Block](#config-block)
+- [Development Setup](#development-setup)
+- [Building the Executable](#building-the-executable)
+- [Releasing a New Version](#releasing-a-new-version)
+- [Auto-Update System](#auto-update-system)
+- [Architecture](#architecture)
 
 ---
 
 ## Features
 
-- Select a mapping file, Excel data file, and Word template from the GUI
-- Supports mapping files in both `.json` and `.xlsx` formats
-- `.xlsx` mappings use a `mappings` sheet and may include an optional `config` or `_config` sheet
-- Selecting a mapping auto-fills the Excel and template paths from its `config` block
-- Manually overriding Excel or template paths writes the change back into the mapping file
-- Generate reports with a **Save As** dialog — pre-filled with the suggested folder and filename
-- The chosen output folder is persisted to both the mapping file and SQLite for next time
-- Support for multiple mapping configurations (one per report type / template)
-- Computed fields: today's date, uppercase/lowercase, string formatting, concatenation, auto-incrementing report numbers
-- New field transformations: numeric scaling, rounding, date formatting, suffix/prefix, and Excel formula evaluation
-- Report counter stored in SQLite and auto-migrated from legacy `report_state.json` if present
-- Mapping paths are registered in SQLite so the last used mapping is known and can be reused
-- Full audit trail: every generated report is logged to SQLite
-- All GUI state (paths, last row) restored automatically on next launch
+- Fills a `.docx` template from a selected Excel row
+- Supports multiple mapping profiles (one JSON file per report type)
+- Auto-generates report numbers using a date-based counter (`yymmdd-N`)
+- Writes the generated report number back into the Excel file
+- Persists all file paths between sessions (no re-selecting every time)
+- Silent background update checker with download progress bar
+- Packaged as a Windows installer (`Setup.exe`)
 
 ---
 
-## Requirements
+## How It Works
 
-- Python 3.10+
-
-```text
-et_xmlfile==2.0.0
-lxml==6.1.1
-openpyxl==3.1.5
-python-docx==1.2.0
-typing_extensions==4.15.0
 ```
+Excel file (.xlsx)
+      │
+      │  row selected by user
+      ▼
+Mapping file (.json)  ──►  Report Generator  ──►  Word report (.docx)
+                                  │
+                                  └──► writes report number back to Excel
+```
+
+1. The user selects an Excel data file, a `.docx` template, a mapping file, and an output folder.
+2. They pick the row number corresponding to the sample they want to report on.
+3. The app reads that row, applies the mapping rules, fills all `{{placeholder}}` tags in the template, and saves the finished `.docx`.
+4. The auto-generated report number (`yymmdd-N`) is written back into the Excel file.
 
 ---
 
 ## Installation
 
-```powershell
-python -m venv env
-.\env\Scripts\Activate.ps1
-pip install -r requirements.txt
+Download the latest `ReportGenerator-Setup-x.x.x.exe` from the [Releases page](https://github.com/alexbalak21/Report-Generator/releases) and run it.
+
+The installer:
+- Installs the app to `C:\Program Files\ReportGenerator\`
+- Copies the `/data` folder (templates, mapping files) alongside the exe
+- Creates a Start Menu shortcut and an optional desktop shortcut
+- Registers an uninstaller in *Add or Remove Programs*
+
+User data (SQLite config database) is stored in `%APPDATA%\ReportGenerator\` and is preserved across updates.
+
+---
+
+## Project Structure
+
+```
+Report-Generator/
+│
+├── app/
+│   ├── __init__.py              # __version__ lives here
+│   ├── app.py                   # Entry point: creates MainWindow, starts update check
+│   ├── updater.py               # Background update checker + download dialog
+│   │
+│   ├── core/
+│   │   ├── excel_reader.py      # Reads .xlsx files, caches all sheets
+│   │   ├── mapping_loader.py    # Loads/saves .json mapping files
+│   │   ├── processors.py        # Field transformation operations
+│   │   ├── report_generator.py  # Orchestrates Excel → template → .docx
+│   │   ├── report_actions.py    # High-level generate action
+│   │   ├── state_manager.py     # Incremental report number state
+│   │   └── word_processor.py    # Fills {{placeholders}} in .docx templates
+│   │
+│   ├── gui/
+│   │   ├── config_persistence.py  # Save/restore UI state via SQLite
+│   │   ├── file_dialogs.py        # File picker wrappers
+│   │   ├── line_selector.py       # Row number widget
+│   │   ├── report_actions.py      # GUI-level generate logic
+│   │   └── windows/
+│   │       ├── main_window.py              # Main application window
+│   │       └── generation_complete_dialog.py
+│   │
+│   ├── repository/
+│   │   ├── config_repository.py   # SQLite: config key-value + mapping path list
+│   │   └── rapport_repository.py
+│   │
+│   └── utils/
+│       └── paths.py               # Path helpers for dev vs frozen exe
+│
+├── data/
+│   ├── rapport_mapping.json     # Default mapping file
+│   ├── rapport_template.docx    # Default Word template
+│   ├── Rapport_data.xlsx        # Sample data file
+│   └── mappings.xlsx            # (legacy reference)
+│
+├── tests/                       # Unit tests
+├── run.py                       # Dev entry point
+├── run.spec                     # PyInstaller build spec
+└── installer.iss                # Inno Setup installer script
 ```
 
 ---
 
-## Running
+## Data Files
 
-```powershell
-python run.py
+### Excel file (`.xlsx`)
+
+Your data file must have a **header row** in row 1. Each subsequent row is one sample/report. The app reads whichever row number you select in the UI.
+
+Example columns:
+| date rapport | nom entreprise client | appellation produit | lot | conformite |
+|---|---|---|---|---|
+| 21/06/2026 | ACME Corp | Steak haché | L240501 | Conforme |
+
+### Word template (`.docx`)
+
+Place `{{placeholder}}` tags anywhere in the document — in paragraphs, tables, headers, or footers. The app replaces each tag with the corresponding value from Excel.
+
+Example:
 ```
-
-Or directly:
-
-```powershell
-python app/app.py
-```
-
----
-
-## Testing
-
-```powershell
-# Activate the virtual environment first
-.\env\Scripts\Activate.ps1
-python -m pytest
-```
-
-If the virtual environment is not yet installed, run:
-
-```powershell
-python -m venv env
-.\env\Scripts\Activate.ps1
-pip install -r requirements.txt
+Date of report: {{date_rapport}}
+Client: {{nom_entreprise_client}}
+Product: {{appellation_produit}}
+Report No.: {{sample_number}}
 ```
 
 ---
 
-## Project structure
+## Mapping File
 
-```text
-Rapport-Generator/
-├── run.py                              # Convenience entry point
-├── requirements.txt
-├── app_data.db                         # SQLite database (auto-created on first run)
-└── app/
-    ├── app.py                          # Application entry point
-    ├── core/
-    │   ├── excel_reader.py             # Reads rows from .xlsx
-    │   ├── mapping_loader.py           # Loads and updates .json/.xlsx mappings
-    │   ├── processors.py               # Built-in field operations
-    │   ├── report_generator.py         # Orchestrates report creation
-    │   ├── state_manager.py            # Report counter migration and generation
-    │   └── word_processor.py           # Fills {{placeholders}} in .docx templates
-    ├── gui/
-    │   ├── config_persistence.py       # GUI state save/restore via SQLite
-    │   ├── file_dialogs.py             # File picker and Save As helpers
-    │   ├── line_selector.py            # [ − ] [ row ] [ + ] widget
-    │   ├── main_window.py              # Main Tkinter window layout and wiring
-    │   └── report_actions.py           # Generation logic and output path resolution
-    └── repository/
-        ├── config_repository.py        # SQLite GUI config + mappings registry
-        └── rapport_repository.py       # SQLite report log + state
-```
+The mapping file is a `.json` file that tells the app how to connect Excel columns to Word placeholders. You can have multiple mapping files for different report types and switch between them in the UI.
 
----
+### Column Mapping
 
-## GUI workflow
-
-### On launch
-1. Last mapping is restored → its `config` block auto-fills the Excel and template paths
-2. Last row number is restored as `last_line_number + 1`
-3. Last output folder is remembered for the Save As dialog
-
-### Generating a report
-1. Select a **mapping file** → Excel and template paths are filled automatically
-2. Adjust the **row number** with `[ − ]` / `[ + ]` or type directly
-3. Click **Generate report**
-4. A **Save As** dialog opens, pre-filled with the suggested folder and filename
-5. Confirm or change the location → report is saved there
-6. If the output folder changed, it is written back to both the mapping file and SQLite
-7. Row number auto-increments for the next report
-
----
-
-## Mapping configuration (`mapping.json` / `mapping.xlsx`)
-
-Each mapping file ties together one Excel table, one Word template, one output folder, and a set of field rules. Selecting a mapping in the GUI is the only step needed to switch report types.
-
-### Full structure
+The simplest rule: take a value directly from an Excel column.
 
 ```json
-{
-  "config": {
-    "data_file":     "C:/Reports/table.xlsx",
-    "template_file": "C:/Reports/template.docx",
-    "output_dir":    "C:/Reports/Output"
-  },
-
-  "date":      "{{date}}",
-  "species":   "{{species}}",
-  "address":   "{{address}}",
-  "inspector": "{{inspector}}",
-  "notes":     "{{notes}}",
-  "product":   "{{product}}",
-
-  "today_date": {
-    "operation": "today",
-    "format": "%d/%m/%Y"
-  },
-  "species_upper": {
-    "operation": "uppercase",
-    "input": "species"
-  },
-  "full_line": {
-    "operation": "format",
-    "format": "{species} inspected on {date}"
-  },
-  "report_number": {
-    "operation": "report_number"
-  },
-  "file_name": {
-    "operation": "format",
-    "format": "{species}_{date}_{report_number}.docx"
-  }
+"nom entreprise client": {
+  "column": "nom entreprise client",
+  "placeholder": "{{nom_entreprise_client}}"
 }
 ```
 
-### `config` block
+### Computed Fields
 
-| Key             | Description                                          |
-|-----------------|------------------------------------------------------|
-| `data_file`     | Path to the Excel `.xlsx` data file                  |
-| `template_file` | Path to the Word `.docx` template                    |
-| `output_dir`    | Default output folder for the Save As dialog         |
-
-All three are updated automatically when the user selects different files or a different output folder in the GUI.
-
-### JSON mapping files
-
-Use a JSON file when you want a plain text mapping configuration.
-
-### XLSX mapping files
-
-XLSX mappings must include a sheet named `mappings`.
-The first row must define headers such as `Spreadsheet Column`, `Placeholder`, and `Operation`.
-Computed rows start with `(computed)` in the `Spreadsheet Column` cell.
-
-A `.xlsx` mapping can also include a `config` or `_config` sheet with key/value pairs.
-That sheet may define the same `data_file`, `template_file`, `output_dir`, and additional metadata.
-
-### Simple column mapping
-
-Maps an Excel column header to a `{{placeholder}}` in the Word template:
+Fields that don't come directly from a column but are calculated:
 
 ```json
-"species": "{{species}}"
+"date_du_jour": {
+  "operation": "today",
+  "format": "%d/%m/%Y",
+  "placeholder": "{{date_du_jour}}"
+}
 ```
 
-The key must match the Excel column header exactly (case-sensitive, trimmed).
+```json
+"numero_rapport": {
+  "operation": "excel_day_counter",
+  "date_column": "date rapport",
+  "sample_column": "numero echantillon",
+  "date_format": "%d/%m/%Y"
+}
+```
 
-### Column mapping with operations
+`excel_day_counter` generates a unique report number in the format `yymmdd-N` where `N` is the count of samples analysed on that day (e.g. `260621-3`).
 
-Use transformation rules for fields that need processing before insertion into the document.
+### Operations
+
+Operations can be chained on any column value under the `"operations"` key:
+
+| Operation | Description | Parameters |
+|---|---|---|
+| `date_format` | Format a date value | `"format": "%d/%m/%Y"` |
+| `uppercase` | Convert to uppercase | — |
+| `lowercase` | Convert to lowercase | — |
+| `multiply` | Multiply numeric value | `"value": 100` |
+| `round` | Round to N decimals | `"decimals": 0` |
+| `suffix` | Append a string | `"value": "%"` |
+| `formula` | Evaluate Excel formula result | — |
+| `concat` | Concatenate multiple fields | `"fields": [...]` |
+| `lookup` | Look up a value in another sheet | `"sheet": "...", "key": "..."` |
+
+Example — display a percentage from a decimal Excel value:
 
 ```json
 "imp": {
@@ -216,228 +210,169 @@ Use transformation rules for fields that need processing before insertion into t
     { "type": "round", "decimals": 0 },
     { "type": "suffix", "value": "%" }
   ]
-},
-"k value": {
-  "column": "k value",
-  "placeholder": "{{k_value}}",
-  "operations": [
-    { "type": "formula" },
-    { "type": "multiply", "value": 100 },
-    { "type": "round", "decimals": 0 },
-    { "type": "suffix", "value": "%" }
-  ]
 }
 ```
 
-In this format:
-- `column` is the Excel header name
-- `placeholder` is the template token written in the Word document
-- `operations` is an ordered list of transformations applied to the value
+### File Name Rule
 
-Use this for any future column that needs a calculation, formatting step, or formula-based value.
-
-### Computed fields
+Controls the output filename of the generated report:
 
 ```json
-"field_name": {
-  "operation": "<operation_name>",
-  ...options...
+"file_name": {
+  "name": "NOVOCIB Rapport d'essai",
+  "operation": "format",
+  "format": "{name} {numero_rapport}.docx"
 }
 ```
 
-The key becomes the placeholder name (`{{field_name}}`).
+This produces filenames like `NOVOCIB Rapport d'essai 260621-3.docx`.
+
+### Config Block
+
+The `"config"` block stores paths and settings that the UI writes back automatically when you select files:
+
+```json
+"config": {
+  "data_file": "C:/Reports/Rapport_data.xlsx",
+  "template_file": "C:/Reports/rapport_template.docx",
+  "output_dir": "C:/Reports/output",
+  "date_format": "%d/%m/%Y"
+}
+```
+
+These are saved automatically — you don't need to edit them manually.
 
 ---
 
-## Supported computed-field operations
+## Development Setup
 
-  | Operation         | Description                                                                     | Parameters                                    |
-  |-------------------|---------------------------------------------------------------------------------|-----------------------------------------------|
-  | `today`           | Today's date                                                                    | `format` — strftime string                    |
-  | `uppercase`       | Excel field value in uppercase                                                  | `input` — Excel column or field name          |
-  | `lowercase`       | Excel field value in lowercase                                                  | `input` — Excel column or field name          |
-  | `format`          | Python-style string template using any available field                         | `format` — e.g. `"{species}_{date}"`         |
-  | `concat`          | Concatenate several values from Excel columns or computed fields               | `parts` — list of names                        |
-  | `report_number`   | Auto-incrementing report ID for the day (`YYMMDD-XX`)                          | _(none)_                                      |
-  | `report_prefix`   | Returns a prefix string from mapping config                                    | _(none)_                                      |
-  | `excel_day_counter` | Generates a daily counter based on a date column                             | `date_column`, `date_format`                  |
-  | `lookup`          | Simple foreign-key lookup across Excel sheets                                  | `sheet`, `key`, `match`, `value`              |
-  | `lookup_join`     | Multi-step relational lookup (join chain)                                      | `steps`, `format`                              |
+**Requirements:** Python 3.11+, Windows (for building the exe)
 
-  ### Supported field-transformation operations
+```powershell
+# Clone the repo
+git clone https://github.com/alexbalak21/Report-Generator.git
+cd Report-Generator
 
-  Use these inside a mapping `operations` list when you need to transform a value from an Excel column before placing it in the document.
+# Create and activate a virtual environment
+python -m venv env
+env\Scripts\activate
 
-  | Type        | Description                                                         | Parameters                              |
-  |-------------|---------------------------------------------------------------------|-----------------------------------------|
-  | `formula`    | No-op; reads the evaluated Excel value when the workbook is loaded with `data_only=True` | _(none)_                          |
-  | `multiply`   | Multiply the value by a number                                      | `value`                                 |
-  | `divide`     | Divide the value by a number                                        | `value`                                 |
-  | `add`        | Add a number to the value                                           | `value`                                 |
-  | `subtract`   | Subtract a number from the value                                    | `value`                                 |
-  | `round`      | Round a numeric value                                                | `decimals`                              |
-  | `date_format`| Parse and render a date value in a specified format                  | `format`                                |
-  | `suffix`     | Append text after the value                                         | `value`                                 |
-  | `prefix`     | Prepend text before the value                                       | `value`                                 |
-  | `upper`      | Uppercase the text                                                  | _(none)_                                |
-  | `lower`      | Lowercase the text                                                  | _(none)_                                |
-  | `strip`      | Trim whitespace from the text                                       | _(none)_                                |
+# Install dependencies
+pip install -r requirements.txt
 
-  ### `format` field references
+# Run the app
+py run.py
+```
 
-  The `format` operation can reference:
-  - Any Excel column by its header name: `{species}`, `{date}`
-  - Any previously computed field: `{report_number}`, `{today_date}`
-  - Fields available from column mappings with `operations` if they are also stored in the mapping result
-  - `file_name` is always resolved last so it can use `{report_number}`
+---
 
-  ### Examples
+## Building the Executable
 
-  ```json
-  "today_date":     { "operation": "today",            "format": "%d/%m/%Y" },
-  "species_upper":  { "operation": "uppercase",        "input": "species" },
-  "label":          { "operation": "format",           "format": "{species} – {address}" },
-  "ref":            { "operation": "concat",           "parts": ["inspector", "species"] },
-  "report_number":  { "operation": "excel_day_counter", "date_column": "date rapport", "date_format": "%d/%m/%Y" },
-  "file_name":      { "operation": "format",           "format": "{species}_{date}_{report_number}.docx" }
-  ```
+**Requirements:** PyInstaller and Inno Setup 6 installed.
 
-  ---
+```powershell
+pip install pyinstaller
 
-  ## Word template placeholders
+# 1. Build the exe folder
+pyinstaller run.spec
 
-  Use double-brace syntax anywhere in the `.docx` template:
+# 2. Build the installer
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+```
 
-  ```
-  {{date}}          {{species}}        {{address}}
-  {{inspector}}     {{notes}}          {{product}}
-  {{today_date}}    {{species_upper}}  {{full_line}}
-  {{report_number}}
-  ```
+Output: `installer_output\ReportGenerator-Setup-x.x.x.exe`
 
-  Any placeholder not matched by the mapping is left unchanged.
+> The `dist/` and `installer_output/` folders are git-ignored — never commit them.
 
-  Note: the app also populates `{{numéro_rapport}}` and `{{sample_number}}` with the generated report number.
+---
 
-  ---
+## Releasing a New Version
 
-  ## Report numbering
+1. **Bump the version** in `app/__init__.py`:
+   ```python
+   __version__ = "1.0.2"
+   ```
 
-  Format: `YYMMDD-XX` — e.g. `260627-03` is the third report on 27 June 2026.
+2. **Update `installer.iss`:**
+   ```ini
+   AppVersion=1.0.2
+   OutputBaseFilename=ReportGenerator-Setup-1.0.2
+   ```
 
-  The counter resets to `01` each new day. It is stored in the `report_state` SQLite table and updated on every successful generation.
+3. **Rebuild:**
+   ```powershell
+   pyinstaller run.spec
+   & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+   ```
 
-  **Migration:** if a `report_state.json` exists from a previous version, its value is imported into SQLite automatically on first run and the file is deleted.
+4. **Push and tag:**
+   ```powershell
+   git add .
+   git commit -m "Release v1.0.2"
+   git tag v1.0.2
+   git push origin main
+   git push origin v1.0.2
+   ```
 
-  ---
+5. **Publish on GitHub:**
+   - Go to [Releases → Draft a new release](https://github.com/alexbalak21/Report-Generator/releases/new)
+   - Choose tag `v1.0.2`, title `v1.0.2`
+   - Attach `installer_output\ReportGenerator-Setup-1.0.2.exe`
+   - Click **Publish release**
 
-  ## Multiple mappings
+Users on older versions will be prompted to update the next time they launch the app.
 
-  Place mapping files anywhere and name them freely:
+---
 
-  ```
-  my-mappings/
-      animals.json
-      inspection.xlsx
-      vehicles.json
-      custom.xlsx
-  ```
+## Auto-Update System
 
-  Click **Select mapping file** in the GUI to switch between them. The last selected mapping is remembered across sessions and tracked in SQLite.
+On every launch, the app silently checks the GitHub Releases API in a background thread:
 
-  ---
+```
+https://api.github.com/repos/alexbalak21/Report-Generator/releases/latest
+```
 
-  ## SQLite database (`app_data.db`)
+If a newer version is found, an update dialog appears:
 
-  Created automatically in the project root on first run. Contains four tables:
+```
+┌──────────────────────────────────────┐
+│       A new version is available!    │
+│          v1.0.1  →  v1.0.2           │
+│                                      │
+│  The update will be downloaded and   │
+│  installed automatically.            │
+│                                      │
+│  ████████████░░░░  4.2 / 6.1 MB      │
+│                                      │
+│  [Download & Install]   [Later]      │
+│                                      │
+│       Ignore this version            │
+└──────────────────────────────────────┘
+```
 
-  ### `config` — GUI persistent state
+| Button | Behaviour |
+|---|---|
+| **Download & Install** | Downloads the `Setup.exe` in the background with a live progress bar, then launches it and closes the app |
+| **Later** | Dismisses the dialog; the user will be prompted again next launch |
+| **Ignore this version** | Saves the version number to the local database; the user will not be prompted for this version again (but will be for the next one) |
 
-  | Key                | Description                                      |
-  |--------------------|--------------------------------------------------|
-  | `last_excel_path`  | Last selected `.xlsx` path                       |
-  | `last_docx_path`   | Last selected `.docx` template path              |
-  | `mapping_path`     | Last selected mapping file path                  |
-  | `last_line_number` | Last used row number                             |
-  | `last_output_dir`  | Last output folder chosen in Save As             |
+If the network is unreachable or GitHub is down, the check fails silently with no impact on app startup.
 
-  > Legacy compatibility: `last_mapping_path` is still read when present, but `mapping_path` is the preferred key.
+---
 
-  ### `mappings` — mapping file registry
+## Architecture
 
-  | Column         | Description                |
-  |----------------|----------------------------|
-  | `id`           | Auto-increment identifier  |
-  | `mapping_path` | Stored mapping file path   |
+### Path resolution
 
-  This table tracks all mappings selected through the GUI.
+Two distinct locations exist when the app is frozen by PyInstaller:
 
-  ### `reports` — audit log
+| Location | Contents | Accessed via |
+|---|---|---|
+| `sys._MEIPASS` | Files declared in `run.spec` `datas[]` (e.g. `icon.ico`) | `get_resource_path()` |
+| `os.path.dirname(sys.executable)` | The exe + files installed by Inno Setup (e.g. `/data`) | `get_data_path()` |
 
-  | Column          | Type    | Description                           |
-  |-----------------|---------|---------------------------------------|
-  | `id`            | TEXT    | Unique ID (`row_N_YYYYMMDDHHMMSS`)    |
-  | `created_at`    | TEXT    | ISO 8601 timestamp                    |
-  | `excel_path`    | TEXT    | Path to the Excel source              |
-  | `template_path` | TEXT    | Path to the Word template             |
-  | `mapping_path`  | TEXT    | Path to the mapping file              |
-  | `row_number`    | INTEGER | Excel row used                        |
-  | `data_json`     | TEXT    | Full data snapshot (JSON)             |
+### Database
 
-  ### `report_state` — report counter
-
-  | Key                  | Value             |
-  |----------------------|-------------------|
-  | `last_report_number` | e.g. `260627-03`  |
-
-  ---
-
-  ## Adding a new operation
-
-  1. Add a function to `app/core/processors.py`:
-
-  ```python
-  def op_titlecase(rule, row_data):
-      field = rule.get("input", "")
-      return str(row_data.get(field, "")).title()
-  ```
-
-  2. Register it in `app/core/report_generator.py`:
-
-  ```python
-  self.operations = {
-      ...
-      "titlecase": processors.op_titlecase,
-  }
-  ```
-
-  3. Use it in a mapping file:
-
-  ```json
-  "species_title": {
-    "operation": "titlecase",
-    "input": "species"
-  }
-  ```
-
-  4. Add `{{species_title}}` to the Word template.
-
-  ---
-
-  ## .gitignore
-
-  ```gitignore
-  env/  
-  .venv/
-  __pycache__/
-  *.py[cod]
-  *.db
-  *.sqlite
-  report_row_*.docx
-  report_state.json
-  .DS_Store
-  Thumbs.db
-  .vscode/
-  .idea/
-  .pytest_cache/
-  ```
+User config is stored in a SQLite database at `%APPDATA%\ReportGenerator\app_data.db` (writable, preserved across updates). It holds:
+- `config` table — key/value pairs (last used paths, ignored update version)
+- `mappings` table — list of known mapping file paths
