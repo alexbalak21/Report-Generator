@@ -4,15 +4,15 @@ import sys
 
 
 def _get_db_path() -> str:
-    # When frozen by PyInstaller, use the temporary _MEIPASS directory.
-    # When running normally, use the directory of this file.
-    base_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
-    db_path = os.path.join(base_dir, "app_data.db")
+    if getattr(sys, "frozen", False):
+        # Frozen exe: store DB in %APPDATA%\ReportGenerator\ (always writable)
+        base_dir = os.path.join(os.environ["APPDATA"], "ReportGenerator")
+    else:
+        # Dev: store DB next to this file
+        base_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # Ensure the directory exists (important when running from the .exe)
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-
-    return db_path
+    os.makedirs(base_dir, exist_ok=True)
+    return os.path.join(base_dir, "app_data.db")
 
 
 def _get_connection():
