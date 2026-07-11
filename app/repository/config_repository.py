@@ -1,31 +1,47 @@
 import sqlite3
 import os
+import sys
 
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "app_data.db")
+def _get_db_path() -> str:
+    # When frozen by PyInstaller, use the temporary _MEIPASS directory.
+    # When running normally, use the directory of this file.
+    base_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    db_path = os.path.join(base_dir, "app_data.db")
+
+    # Ensure the directory exists (important when running from the .exe)
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+    return db_path
 
 
 def _get_connection():
-    conn = sqlite3.connect(os.path.abspath(DB_PATH))
+    db_path = _get_db_path()
+    conn = sqlite3.connect(db_path)
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS config (
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL
         )
     """)
+
     conn.execute("""
         CREATE TABLE IF NOT EXISTS mappings (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             mapping_path TEXT NOT NULL UNIQUE
         )
     """)
+
     conn.commit()
     return conn
 
 
 def config_get(key: str) -> str | None:
     with _get_connection() as conn:
-        row = conn.execute("SELECT value FROM config WHERE key = ?", (key,)).fetchone()
+        row = conn.execute(
+            "SELECT value FROM config WHERE key = ?", (key,)
+        ).fetchone()
         return row[0] if row else None
 
 
@@ -46,6 +62,7 @@ def mapping_add(mapping_path: str) -> int:
             (mapping_path,),
         )
         conn.commit()
+
         if cursor.lastrowid:
             return cursor.lastrowid
 
@@ -53,6 +70,7 @@ def mapping_add(mapping_path: str) -> int:
             "SELECT id FROM mappings WHERE mapping_path = ?",
             (mapping_path,),
         ).fetchone()
+
         return row[0] if row else 0
 
 
@@ -74,5 +92,7 @@ def mapping_get_last() -> str | None:
 
 def mapping_delete(mapping_id: int) -> None:
     with _get_connection() as conn:
-        conn.execute("DELETE FROM mappings WHERE id = ?", (mapping_id,))
+        conn.execute(
+            "DELETE FROM mappings WHERE id = ?", (mapping_id,)
+        )
         conn.commit()

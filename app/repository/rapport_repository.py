@@ -1,13 +1,25 @@
 import sqlite3
 import json
 import os
+import sys
 import datetime
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "app_data.db")
+
+def _get_db_path() -> str:
+    # When frozen by PyInstaller, use the temporary _MEIPASS directory.
+    # When running normally, use the directory of this file.
+    base_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    db_path = os.path.join(base_dir, "app_data.db")
+
+    # Ensure the directory exists (important when running from the .exe)
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+    return db_path
 
 
 def _get_connection():
-    conn = sqlite3.connect(os.path.abspath(DB_PATH))
+    db_path = _get_db_path()
+    conn = sqlite3.connect(db_path)
 
     conn.execute("""
         CREATE TABLE IF NOT EXISTS reports (

@@ -1,3 +1,0 @@
-Instead of using a json file for mapping the placeholders to the columns in the excel file, I want to use an mappings.xlsx with sheet name : mappings.
-Can you analyze the columns of the spreadsheet and update the python code to use this structure..
-
