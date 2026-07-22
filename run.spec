@@ -8,7 +8,7 @@ a = Analysis(
         ('app/repository/app_data.db', 'app/repository'),
         ('icon.ico', '.'),
     ],
-    hiddenimports=[],
+    hiddenimports=["requests", "urllib3", "certifi", "charset_normalizer", "idna"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

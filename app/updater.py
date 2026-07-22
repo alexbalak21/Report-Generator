@@ -7,8 +7,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from urllib.request import urlopen, Request
 from urllib.error import URLError
-from app.utils.paths import get_resource_path
 
+from app.utils.paths import get_resource_path
 from app import __version__
 from app.repository.config_repository import config_get, config_set
 
@@ -43,6 +43,7 @@ class UpdateDialog(tk.Toplevel):
 
         self._download_url = download_url
         self._latest_version = latest_version
+        self._cancelled = False
 
         self._build_ui(latest_version)
         self._center(parent)
@@ -89,13 +90,14 @@ class UpdateDialog(tk.Toplevel):
         )
         self._install_btn.pack(side="left", padx=6)
 
-        tk.Button(
+        self._cancel_btn = tk.Button(
             btn_frame,
             text="Later",
             width=10,
             relief="flat",
-            command=self.destroy,
-        ).pack(side="left", padx=6)
+            command=self._on_cancel,
+        )
+        self._cancel_btn.pack(side="left", padx=6)
 
         # Ignore this version link-style button
         tk.Button(
@@ -116,45 +118,113 @@ class UpdateDialog(tk.Toplevel):
         self.geometry(f"+{x}+{y}")
 
     def _ignore_version(self):
-        """Store the ignored version in DB so this version is never shown again."""
         config_set(IGNORED_VERSION_KEY, self._latest_version)
+        self.destroy()
+
+    def _on_cancel(self):
+        self._cancelled = True
         self.destroy()
 
     def _start_download(self):
         self._install_btn.config(state="disabled", text="Downloading…")
+        self._cancel_btn.config(state="disabled")
         self._status.config(text="Starting download…")
+        self._progress.config(mode="indeterminate")
+        self._progress.start(10)
         threading.Thread(target=self._download, daemon=True).start()
 
     def _download(self):
+        tmp_path = None
         try:
-            req = Request(self._download_url, headers={"User-Agent": "ReportGenerator"})
-            with urlopen(req, timeout=30) as response:
-                total = int(response.headers.get("Content-Length", 0))
-                downloaded = 0
-                chunk_size = 8192
+            # Use requests for reliable redirect following (GitHub → CDN)
+            try:
+                import requests as _requests
+                _use_requests = True
+            except ImportError:
+                _use_requests = False
 
-                tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".exe")
+            if _use_requests:
+                self._download_with_requests(tmp_path)
+            else:
+                self._download_with_urllib(tmp_path)
+
+        except Exception as e:
+            if not self._cancelled:
+                self.after(0, self._on_error, str(e))
+
+    def _download_with_requests(self, _tmp_path):
+        import requests
+
+        with requests.get(
+            self._download_url,
+            stream=True,
+            allow_redirects=True,
+            timeout=30,
+            headers={"User-Agent": "ReportGenerator"},
+        ) as response:
+            response.raise_for_status()
+
+            total = int(response.headers.get("Content-Length", 0))
+            downloaded = 0
+
+            # Switch progress bar to determinate once we know the size
+            if total:
+                self.after(0, self._switch_to_determinate)
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".exe") as tmp:
                 tmp_path = tmp.name
+                for chunk in response.iter_content(chunk_size=8192):
+                    if self._cancelled:
+                        return
+                    if chunk:
+                        tmp.write(chunk)
+                        downloaded += len(chunk)
+                        if total:
+                            pct = downloaded / total * 100
+                            mb_done = downloaded / 1_048_576
+                            mb_total = total / 1_048_576
+                            self.after(0, self._update_progress, pct, mb_done, mb_total)
 
+        if not self._cancelled:
+            self.after(0, self._launch_installer, tmp_path)
+
+    def _download_with_urllib(self, _tmp_path):
+        """Fallback when requests is not installed."""
+        from urllib.request import urlopen, Request
+
+        req = Request(
+            self._download_url,
+            headers={"User-Agent": "ReportGenerator"},
+        )
+        with urlopen(req, timeout=60) as response:
+            total = int(response.headers.get("Content-Length", 0))
+            downloaded = 0
+
+            if total:
+                self.after(0, self._switch_to_determinate)
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".exe") as tmp:
+                tmp_path = tmp.name
                 while True:
-                    chunk = response.read(chunk_size)
+                    if self._cancelled:
+                        return
+                    chunk = response.read(8192)
                     if not chunk:
                         break
                     tmp.write(chunk)
                     downloaded += len(chunk)
-
                     if total:
                         pct = downloaded / total * 100
                         mb_done = downloaded / 1_048_576
                         mb_total = total / 1_048_576
                         self.after(0, self._update_progress, pct, mb_done, mb_total)
 
-                tmp.close()
-
+        if not self._cancelled:
             self.after(0, self._launch_installer, tmp_path)
 
-        except Exception as e:
-            self.after(0, self._on_error, str(e))
+    def _switch_to_determinate(self):
+        self._progress.stop()
+        self._progress.config(mode="determinate", value=0)
 
     def _update_progress(self, pct: float, mb_done: float, mb_total: float):
         self._progress["value"] = pct
@@ -162,9 +232,11 @@ class UpdateDialog(tk.Toplevel):
 
     def _launch_installer(self, installer_path: str):
         self._status.config(text="Download complete — launching installer…")
+        self._progress.stop()
         self._progress["value"] = 100
-        subprocess.Popen([installer_path], shell=False)
-        self.after(500, self._quit_app)
+        # /SILENT = shows progress, no wizard. /VERYSILENT = fully silent.
+        subprocess.Popen([installer_path, "/SILENT"], shell=False)
+        self.after(800, self._quit_app)
 
     def _quit_app(self):
         root = self.master
@@ -173,7 +245,10 @@ class UpdateDialog(tk.Toplevel):
         root.destroy()
 
     def _on_error(self, message: str):
+        self._progress.stop()
+        self._progress.config(mode="determinate", value=0)
         self._install_btn.config(state="normal", text="Download & Install")
+        self._cancel_btn.config(state="normal")
         self._status.config(text="")
         messagebox.showerror(
             "Download Failed",
