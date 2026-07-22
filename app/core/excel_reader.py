@@ -228,6 +228,7 @@ class ExcelReader:
         target = str(key_value).strip() if key_value is not None else ""
         for row in rows:
             cell = row.get(key_column)
-            if str(cell).strip() if cell is not None else "" == target:
+            cell_str = str(cell).strip() if cell is not None else ""
+            if cell_str == target:
                 return row
         return None
