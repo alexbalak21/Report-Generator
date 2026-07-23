@@ -73,6 +73,7 @@ def resolve_output_path(mapping_path: str, excel_path: str,
         }
 
         excel = ExcelReader(excel_path)
+        excel.set_data_sheet(cfg.get("data_sheet"))
         excel.load()
         raw_row  = excel.get_row_as_dict(row_number)
         row_data = {

@@ -81,32 +81,46 @@ class WordProcessor:
         return "{{" in text and "}}" in text
 
     def _merge_split_placeholders(self, paragraph) -> None:
+        """
+        Merge runs so that every {{...}} placeholder lands in a single run.
+
+        Word sometimes splits a placeholder like {{qualite}} across many runs,
+        even splitting the opening {{ itself into ' {' + '{'. A simple
+        search for '{{' inside individual runs misses that. Instead we:
+          1. Join all run texts to get the full paragraph text.
+          2. Use the regex to find every placeholder and its char span.
+          3. Figure out which runs each placeholder spans and merge them.
+          4. Process matches in reverse order so earlier indices stay valid.
+        """
         runs = paragraph.runs
-        i = 0
-        while i < len(runs):
-            text = runs[i].text
-            open_idx = text.find("{{")
-            if open_idx == -1:
-                i += 1
+        if len(runs) <= 1:
+            return
+
+        full_text = "".join(r.text for r in runs)
+        matches = list(PLACEHOLDER_RE.finditer(full_text))
+        if not matches:
+            return
+
+        # Starting character position of each run inside full_text
+        starts = []
+        pos = 0
+        for run in runs:
+            starts.append(pos)
+            pos += len(run.text)
+
+        def run_at(char_pos: int) -> int:
+            for idx in range(len(runs) - 1, -1, -1):
+                if starts[idx] <= char_pos:
+                    return idx
+            return 0
+
+        # Process in reverse so merging higher-index runs does not shift lower ones
+        for m in reversed(matches):
+            first = run_at(m.start())
+            last  = run_at(m.end() - 1)
+            if first == last:
                 continue
-
-            if "}}" in text[open_idx:]:
-                i += 1
-                continue
-
-            j = i + 1
-            accumulated = text
-            while j < len(runs):
-                accumulated += runs[j].text
-                if "}}" in accumulated:
-                    break
-                j += 1
-
-            if "}}" not in accumulated:
-                i += 1
-                continue
-
-            runs[i].text = accumulated
-            for k in range(i + 1, j + 1):
+            merged = "".join(r.text for r in runs[first : last + 1])
+            runs[first].text = merged
+            for k in range(first + 1, last + 1):
                 runs[k].text = ""
-            i += 1

@@ -3,7 +3,8 @@
     "data_file": "S:/DEV/Report-Generator/data/new_data.xlsx",
     "template_file": "S:/DEV/Report-Generator/data/new_rapport_template.docx",
     "output_dir": "S:\\DEV\\Report-Generator",
-    "date_format": "%d/%m/%Y"
+    "date_format": "%d/%m/%Y",
+    "data_sheet": "Data"
   },
   "date rapport": {
     "column": "date rapport",
@@ -19,7 +20,14 @@
   },
   "adresse entreprise client": {
     "column": "adresse entreprise client",
-    "placeholder": "{{adresse_entreprise_client}}"
+    "placeholder": "{{adresse_entreprise_client}}",
+    "operations": [
+      {
+        "type": "replace",
+        "find": ", ",
+        "replace": "\\n"
+      }
+    ]
   },
   "nom destinataire": {
     "column": "nom destinataire",
@@ -193,6 +201,24 @@
     "date_column": "date rapport",
     "sample_column": "numero echantillon",
     "date_format": "%d/%m/%Y"
+  },
+  "critere_qualite": {
+    "operation": "lookup_join",
+    "placeholder": "{{critere_qualite}}",
+    "steps": [
+      {
+        "sheet": "especes",
+        "key": "Nom Latin",
+        "match": "espece",
+        "value": "Nom Français"
+      },
+      {
+        "sheet": "espece-critere_qualite",
+        "key": "Espace",
+        "match": "<previous>",
+        "value": "Critere"
+      }
+    ]
   },
   "file_name": {
     "name": "NOVOCIB Rapport d'essai",

@@ -136,6 +136,12 @@ def _apply_string_operation(v, op):
         return str(v).lower()
     if op_type == "strip":
         return str(v).strip()
+    if op_type == "replace":
+        find    = op.get("find", "")
+        replace = op.get("replace", "")
+        # Support \n as a literal newline in the JSON value
+        replace = replace.replace("\\n", "\n")
+        return str(v).replace(find, replace)
     return v
 
 
@@ -251,8 +257,8 @@ def op_lookup_join(rule: dict, row_data: dict, excel_reader=None) -> str | None:
                 f"Available: {list(collected.keys())}"
             )
 
-    # No format string — return all collected values joined by ", "
-    return ", ".join(v for v in collected.values() if v)
+    # No format string — return the last step's value only
+    return previous_value if previous_value is not None else ""
 
 # ── excel_day_counter ─────────────────────────────────────────────────────────
 

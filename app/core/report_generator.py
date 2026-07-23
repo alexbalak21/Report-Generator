@@ -87,8 +87,10 @@ class ReportGenerator:
         match = re.search(r"\{\{(.*?)\}\}", placeholder)
         return match.group(1).strip() if match else None
 
-    def _load_excel(self, row_number: int):
+    def _load_excel(self, row_number: int, data_sheet: str | None = None):
         excel = ExcelReader(self.excel_path)
+        if data_sheet:
+            excel.set_data_sheet(data_sheet)
         excel.load()
         raw_row = excel.get_row_as_dict(row_number)
         excel_columns = {self._normalize_header(c) for c in excel.get_columns()}
@@ -287,8 +289,10 @@ class ReportGenerator:
     # ------------------------------------------------------------------
 
     def generate(self, row_number: int, output_path: str) -> str:
-        excel, raw_row, excel_columns = self._load_excel(row_number)
         config, mapping = self._load_mapping()
+        excel, raw_row, excel_columns = self._load_excel(
+            row_number, data_sheet=config.get("data_sheet")
+        )
 
         date_format = config.get("date_format", DEFAULT_DATE_FORMAT)
         report_prefix = config.get("report_prefix", "")
