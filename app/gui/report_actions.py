@@ -10,6 +10,9 @@ from app.core.mapping_loader import MappingLoader
 from app.core.excel_reader import ExcelReader
 from app.core.state_manager import ReportStateManager
 from app.repository.rapport_repository import save_report
+from app.logger import get_logger
+
+log = get_logger(__name__)
 
 
 def _peek_report_number(state_mgr: ReportStateManager) -> str:
@@ -43,7 +46,8 @@ def resolve_output_path(mapping_path: str, excel_path: str,
 
     file_name_rule = rules.get("file_name")
     if not isinstance(file_name_rule, dict):
-        return initial_dir, f"report_row_{row_number}.docx"
+        log.warning("Falling back to generic filename for row %s", row_number)
+    return initial_dir, f"report_row_{row_number}.docx"
 
     try:
         gen = ReportGenerator(excel_path, docx_path, mapping_path)
@@ -106,16 +110,20 @@ def resolve_output_path(mapping_path: str, excel_path: str,
         enriched = {**row_data, **computed}
         raw_name = gen.compute_value(file_name_rule, enriched, operations)
         if raw_name:
-            return initial_dir, gen._sanitize_filename(raw_name)
+            sanitized = gen._sanitize_filename(raw_name)
+            log.info("Resolved output filename: %s  (row=%s)", sanitized, row_number)
+            return initial_dir, sanitized
 
     except Exception:
-        traceback.print_exc()   # visible in the terminal — helps diagnose future issues
+        log.exception("resolve_output_path failed for row %s", row_number)
 
+    log.warning("Falling back to generic filename for row %s", row_number)
     return initial_dir, f"report_row_{row_number}.docx"
 
 
 def generate_report(excel: str, docx: str, mapping: str,
                     row_number: int, output_path: str) -> str:
+    log.info("generate_report called — row=%s  output=%s", row_number, output_path)
     """
     Run the report generator to the explicit output_path chosen by the user.
     Returns the final path.

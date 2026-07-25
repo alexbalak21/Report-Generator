@@ -3,6 +3,9 @@ import json
 import os
 import sys
 import datetime
+from app.logger import get_logger
+
+log = get_logger(__name__)
 
 
 def _get_db_path() -> str:
@@ -46,7 +49,8 @@ def _get_connection():
 
 # ── Report log ────────────────────────────────────────────────────────────────
 
-def save_report(report_id: str, created_at: str, excel_path: str,
+def save_report(  # noqa: PLR0913
+report_id: str, created_at: str, excel_path: str,
                 template_path: str, mapping_path: str,
                 row_number: int, data: dict) -> None:
     with _get_connection() as conn:

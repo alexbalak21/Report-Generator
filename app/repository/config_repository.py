@@ -1,4 +1,7 @@
 import sqlite3
+from app.logger import get_logger
+
+log = get_logger(__name__)
 import os
 import sys
 
@@ -46,6 +49,7 @@ def config_get(key: str) -> str | None:
 
 
 def config_set(key: str, value: str) -> None:
+    log.debug("config_set  key=%s  value=%s", key, value)
     with _get_connection() as conn:
         conn.execute(
             "INSERT INTO config (key, value) VALUES (?, ?) "

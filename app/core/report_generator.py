@@ -10,6 +10,9 @@ from .word_processor import WordProcessor
 from .mapping_loader import MappingLoader
 from .state_manager import ReportStateManager
 from . import processors
+from app.logger import get_logger
+
+log = get_logger(__name__)
 
 # Characters illegal in Windows filenames
 _ILLEGAL_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -243,6 +246,7 @@ class ReportGenerator:
             filled["{{sample_number}}"] = num_val
 
     def _write_output_document(self, filled: dict, output_path: str) -> None:
+        log.debug("Writing Word document to %s  (%d placeholders filled)", output_path, len(filled))
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         word = WordProcessor(self.template_path)
         word.fill_placeholders(filled, output_path)
@@ -285,8 +289,9 @@ class ReportGenerator:
             ws.cell(row=row_number, column=num_col,  value=numero_rapport)
             ws.cell(row=row_number, column=full_col, value=full_numero)
             wb.save(self.excel_path)
+            log.info("Wrote back to Excel row=%s  numero_rapport=%s  full=%s", row_number, numero_rapport, full_numero)
         except Exception as exc:
-            print(f"[warn] Could not write back to Excel: {exc}")
+            log.warning("Could not write back to Excel: %s", exc)
 
 
     # ------------------------------------------------------------------
@@ -294,6 +299,7 @@ class ReportGenerator:
     # ------------------------------------------------------------------
 
     def generate(self, row_number: int, output_path: str) -> str:
+        log.info("generate() called — row=%s  output=%s", row_number, output_path)
         config, mapping = self._load_mapping()
         excel, raw_row, excel_columns = self._load_excel(
             row_number, data_sheet=config.get("data_sheet")

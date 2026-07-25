@@ -38,27 +38,46 @@ $installerContent = $installerContent `
 
 Set-Content $installerFile $installerContent
 
-# --- 5. Print build commands ---
-Write-Host ""
+# --- 5. Execute build commands ---
 Write-Host "==============================="
-Write-Host "BUILD COMMANDS"
+Write-Host "BUILD PROCESS"
 Write-Host "==============================="
-Write-Host "pyinstaller run.spec"
-Write-Host "& 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' installer.iss"
-Write-Host ""
 
-# --- 6. Print git commands ---
-Write-Host "==============================="
-Write-Host "GIT COMMANDS"
-Write-Host "==============================="
-Write-Host "git add ."
-Write-Host "git commit -m \"Release v$nextVersion\""
-Write-Host "git tag v$nextVersion"
-Write-Host "git push origin main"
-Write-Host "git push origin v$nextVersion"
-Write-Host ""
+Write-Host "Running PyInstaller..."
+pyinstaller run.spec
 
-# --- 7. Release info ---
+Write-Host "Running Inno Setup Compiler..."
+& 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' installer.iss
+
+Write-Host "Build completed."
+
+# --- 6. Execute git commands ---
+Write-Host "==============================="
+Write-Host "GIT PROCESS"
+Write-Host "==============================="
+
+Write-Host "Adding files..."
+git add .
+
+Write-Host "Committing..."
+git commit -m "Release v$nextVersion"
+
+Write-Host "Tagging..."
+git tag v$nextVersion
+
+Write-Host "Pushing main..."
+git push origin main
+
+Write-Host "Pushing tag..."
+git push origin v$nextVersion
+
+Write-Host "Git operations completed."
+
+# --- 7. Open browser to GitHub release page ---
+Write-Host "Opening GitHub release page..."
+Start-Process "https://github.com/alexbalak21/Report-Generator/releases/new"
+
+# --- 8. Final info ---
 Write-Host "==============================="
 Write-Host "GITHUB RELEASE INFO"
 Write-Host "==============================="
@@ -68,4 +87,4 @@ Write-Host "Release title: v$nextVersion"
 Write-Host "URL: https://github.com/alexbalak21/Report-Generator/releases/new"
 Write-Host ""
 
-Write-Host "Done. Version updated everywhere."
+Write-Host "Done. Version updated, installer built, git pushed, browser opened."

@@ -1,4 +1,7 @@
 import datetime
+from app.logger import get_logger
+
+log = get_logger(__name__)
 
 
 def op_today(rule, row_data):
