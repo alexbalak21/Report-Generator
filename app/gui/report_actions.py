@@ -51,8 +51,14 @@ def resolve_output_path(mapping_path: str, excel_path: str,
         # Peek at the next report number WITHOUT consuming it
         peeked_number = _peek_report_number(gen.state_manager)
 
-        # Build a fake operations map that returns the peeked number instead of
-        # calling generate_report_number() (which would increment the counter)
+        # Build the Excel reader first so the operations closures below
+        # can safely reference `excel` (avoids UnboundLocalError if anything
+        # throws between dict construction and the assignment).
+        excel = ExcelReader(excel_path)
+        excel.set_data_sheet(cfg.get("data_sheet"))
+        excel.load()
+        raw_row = excel.get_row_as_dict(row_number)
+
         from app.core import processors
 
         def _peek_report_number_op(rule, row):
@@ -71,11 +77,6 @@ def resolve_output_path(mapping_path: str, excel_path: str,
             "lookup":            lambda rule, row: processors.op_lookup(rule, row, excel),
             "lookup_join":       lambda rule, row: processors.op_lookup_join(rule, row, excel),
         }
-
-        excel = ExcelReader(excel_path)
-        excel.set_data_sheet(cfg.get("data_sheet"))
-        excel.load()
-        raw_row  = excel.get_row_as_dict(row_number)
         row_data = {
             k: gen._normalize_field_value(v, date_format)
             for k, v in raw_row.items()

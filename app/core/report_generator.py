@@ -259,7 +259,12 @@ class ReportGenerator:
         """
         try:
             wb = openpyxl.load_workbook(self.excel_path)
-            ws = wb.active
+
+            # Always write to the data sheet (first sheet), never wb.active —
+            # wb.active reflects whichever sheet the user last had open in Excel.
+            cfg = self.mapping_loader.load_config()
+            data_sheet_name = cfg.get("data_sheet") or wb.sheetnames[0]
+            ws = wb[data_sheet_name] if data_sheet_name in wb.sheetnames else wb[wb.sheetnames[0]]
 
             headers = [
                 self._normalize_header(ws.cell(row=1, column=c).value)

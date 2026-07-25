@@ -177,15 +177,22 @@ class ExcelReader:
     # ------------------------------------------------------------------
 
     def _active_sheet_name(self) -> str:
-        """Return the pinned data sheet name, or fall back to workbook's active sheet."""
+        """Return the pinned data sheet name, or fall back to the first sheet.
+
+        Never uses workbook.active — that reflects whichever sheet the user
+        had selected when they last saved the file in Excel, which is
+        unreliable as a data-sheet selector.
+        """
         if self._data_sheet_name:
-            # Prefer exact match, then case-insensitive
+            # Exact match first, then case-insensitive
             if self._data_sheet_name in self._sheets:
                 return self._data_sheet_name
             for name in self._sheets:
                 if name.lower() == self._data_sheet_name.lower():
                     return name
-        return self.workbook.active.title
+        # Fallback: first sheet in the workbook (position 0), not the active one
+        names = self.workbook.sheetnames
+        return names[0] if names else ""
 
     @property
     def sheet(self):
