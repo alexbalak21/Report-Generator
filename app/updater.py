@@ -9,9 +9,6 @@ from urllib.request import urlopen, Request
 from urllib.error import URLError
 
 from app.utils.paths import get_resource_path
-from app.logger import get_logger
-
-log = get_logger(__name__)
 from app import __version__
 from app.repository.config_repository import config_get, config_set
 
@@ -234,7 +231,6 @@ class UpdateDialog(tk.Toplevel):
         self._status.config(text=f"Downloading… {mb_done:.1f} / {mb_total:.1f} MB")
 
     def _launch_installer(self, installer_path: str):
-        log.info("Download complete, launching installer: %s", installer_path)
         self._status.config(text="Download complete — launching installer…")
         self._progress.stop()
         self._progress["value"] = 100
@@ -270,7 +266,6 @@ def check_for_updates(parent_window: tk.Tk) -> None:
     def _check():
         data = _fetch_latest()
         if not data:
-            log.debug("Update check: no data returned from GitHub")
             return
 
         latest_tag = data.get("tag_name", "")
@@ -279,7 +274,6 @@ def check_for_updates(parent_window: tk.Tk) -> None:
 
         latest_version = latest_tag.lstrip("v")
 
-        log.info("Update check: latest=%s  current=%s", latest_tag, __version__)
         try:
             if _parse_version(latest_tag) <= _parse_version(__version__):
                 return  # Already up to date
@@ -300,7 +294,6 @@ def check_for_updates(parent_window: tk.Tk) -> None:
         if not download_url:
             return
 
-        log.info("New version available: %s — prompting user", latest_version)
         parent_window.after(0, lambda: UpdateDialog(parent_window, latest_version, download_url))
 
     threading.Thread(target=_check, daemon=True).start()

@@ -23,6 +23,7 @@ installer_output\
 
 # ── Generated reports ──────────────────────────────────────────────────────────
 report_row_*.docx
+*.docx
 
 # ── Report state (auto-managed, not for version control) ──────────────────────
 app/mappings/report_state.json

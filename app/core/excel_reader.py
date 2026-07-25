@@ -4,9 +4,6 @@ import re
 from itertools import zip_longest
 
 import openpyxl
-from app.logger import get_logger
-
-log = get_logger(__name__)
 
 
 class ExcelReader:
@@ -24,7 +21,6 @@ class ExcelReader:
         self._data_sheet_name = sheet_name.strip() if sheet_name else None
 
     def load(self):
-        log.debug("Loading workbook: %s", self.filepath)
         """Load the workbook and pre-cache all sheets."""
         self._load_workbooks()
         self._cache_sheets()
@@ -246,7 +242,6 @@ class ExcelReader:
         return self._sheets[sheet_name]
 
     def find_row(self, sheet_name: str, key_column: str, key_value) -> dict | None:
-        log.debug("find_row  sheet=%s  key_column=%s  key_value=%s", sheet_name, key_column, key_value)
         """
         Return the first row in sheet_name where key_column == key_value.
         Returns None if no match is found.

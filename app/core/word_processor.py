@@ -1,9 +1,5 @@
 import re
 
-from app.logger import get_logger
-
-log = get_logger(__name__)
-
 try:
     from docx import Document
     from docx.oxml.ns import qn
@@ -48,12 +44,10 @@ class WordProcessor:
         return [placeholder.strip("{}") for placeholder in found]
 
     def fill_placeholders(self, mapping: dict, output_path: str) -> None:
-        log.debug("fill_placeholders called with %d keys", len(mapping))
         for para in self._all_paragraphs():
             self._replace_in_paragraph(para, mapping)
             if self._has_remaining_placeholder(para.text):
                 self._replace_in_paragraph(para, mapping)
-        log.info("Word document saved: %s", output_path)
         self.document.save(output_path)
 
     # ------------------------------------------------------------------
