@@ -1,0 +1,1 @@
+7z a Report-Generator.zip app data tests run.py run.spec installer.iss requirements.txt icon.ico "-xr!__pycache__" "-xr!*.pyc"

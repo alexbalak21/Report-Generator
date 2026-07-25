@@ -15,6 +15,7 @@ installer_output\
 *.egg-info/
 *.egg
 *.exe
+*.zip
 
 # ── SQLite database ────────────────────────────────────────────────────────────
 *.db
