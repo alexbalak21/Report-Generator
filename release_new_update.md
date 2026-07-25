@@ -4,13 +4,13 @@
 
 **`app/__init__.py`**
 ```python
-__version__ = "1.0.2"  # increment this
+__version__ = "1.0.6"  # increment this
 ```
 
 **`installer.iss`** — update two lines:
 ```ini
-AppVersion=1.0.2
-OutputBaseFilename=ReportGenerator-Setup-1.0.2
+AppVersion=1.0.6
+OutputBaseFilename=ReportGenerator-Setup-1.0.6
 ```
 
 ---
@@ -30,10 +30,10 @@ Output: `installer_output\ReportGenerator-Setup-1.0.2.exe`
 
 ```powershell
 git add .
-git commit -m "Release v1.0.2"
-git tag v1.0.2
+git commit -m "Release v1.0.6"
+git tag v1.0.6
 git push origin main
-git push origin v1.0.2
+git push origin v1.0.6
 ```
 
 ---
