@@ -82,8 +82,30 @@ def resolve_output_path(mapping_path: str, excel_path: str,
             for k, v in raw_row.items()
         }
 
+        excel_columns = {gen._normalize_header(c) for c in excel.get_columns()}
+
         # Seed computed with known values
         computed = {"report_prefix": report_prefix}
+
+        # Resolve plain column mappings first (e.g. "coa_number": {"column": "..."}).
+        # These have no "operation" key, so the computed-fields loop below never
+        # touches them — without this step, any {placeholder} in file_name.format
+        # that comes from a column mapping (not a computed field) silently fails,
+        # which is what caused the "report_row_N.docx" fallback.
+        for key, rule in rules.items():
+            if not isinstance(rule, dict) or key == "file_name":
+                continue
+            column_name = gen._normalize_header(rule.get("column", ""))
+            if not column_name or column_name not in excel_columns:
+                continue
+            value = raw_row.get(column_name, row_data.get(column_name, ""))
+            try:
+                value = processors.apply_operations(
+                    value, rule.get("operations"), row_data, excel
+                )
+            except Exception:
+                pass
+            computed[key] = value
 
         # Resolve all computed fields except file_name (single pass is enough here)
         for _ in range(len(rules) + 1):
