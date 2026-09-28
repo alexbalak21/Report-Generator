@@ -47,3 +47,22 @@ class TestProcessors(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestNumberFormat(unittest.TestCase):
+    def _fmt(self, v, **kw):
+        return apply_operations(v, [{"type": "number_format", **kw}])
+
+    def test_zero_shows_two_decimals(self):
+        self.assertEqual(self._fmt(0), "0.00")
+
+    def test_half_up_rounding(self):
+        self.assertEqual(self._fmt(1.005), "1.01")
+        self.assertEqual(self._fmt(0.375), "0.38")
+
+    def test_comma_separator(self):
+        self.assertEqual(self._fmt(0.5, decimal_separator=","), "0,50")
+
+    def test_blank_and_text_unchanged(self):
+        self.assertEqual(self._fmt(""), "")
+        self.assertEqual(self._fmt("n/a"), "n/a")

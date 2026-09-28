@@ -95,6 +95,38 @@ def _apply_round(v, op):
         return v
 
 
+def _apply_number_format(v, op):
+    """
+    Fixed-decimal display: 0 -> "0.00", 0.1 -> "0.10", 1.005 -> "1.01".
+
+    op keys:
+      decimals           number of decimals to always show (default 2)
+      decimal_separator  "." (default) or "," for French-style output
+      thousands          optional thousands separator (e.g. " "); default none
+
+    Uses half-up rounding on the decimal representation (lab-style), not
+    Python's binary float rounding. Non-numeric / empty values are returned
+    unchanged, so blank cells stay blank.
+    """
+    from decimal import Decimal, ROUND_HALF_UP
+
+    try:
+        num = _to_number(v)
+    except Exception:
+        return v
+
+    decimals = max(0, int(op.get("decimals", 2)))
+    quant = Decimal(1).scaleb(-decimals)
+    d = Decimal(repr(num)).quantize(quant, rounding=ROUND_HALF_UP)
+    if d == 0:
+        d = abs(d)  # avoid "-0.00"
+    text = f"{d:,.{decimals}f}" if op.get("thousands") else f"{d:.{decimals}f}"
+    if op.get("thousands"):
+        text = text.replace(",", "\x00")
+    text = text.replace(".", op.get("decimal_separator", "."))
+    return text.replace("\x00", op.get("thousands", ""))
+
+
 def _apply_date_format(v, op):
     import datetime as _dt
 
@@ -344,6 +376,7 @@ def apply_operations(value, operations: list | None, row_data: dict | None = Non
       - formula: noop (workbook is loaded with data_only=True so value is already computed)
       - multiply/divide/add/subtract (use numeric coercion)
       - round (decimals int)
+      - number_format (fixed decimals, e.g. 0 -> "0.00")
       - suffix/prefix (string concatenation)
       - upper/lower/strip
 
@@ -365,6 +398,10 @@ def apply_operations(value, operations: list | None, row_data: dict | None = Non
 
         if t == "round":
             v = _apply_round(v, op)
+            continue
+
+        if t == "number_format":
+            v = _apply_number_format(v, op)
             continue
 
         if t == "date_format":
