@@ -23,14 +23,16 @@ NUMERO_RAPPORT_COLUMN  = "numero rapport"
 
 
 class ReportGenerator:
-    def __init__(self, excel_path, template_path, mapping_path):
+    def __init__(self, excel_path, template_path, mapping_path, profile_slug=None):
         self.excel_path    = excel_path
         self.template_path = template_path
         self.mapping_path  = mapping_path
 
         self.mapping_loader = MappingLoader(mapping_path)
+        self.profile_slug   = profile_slug
         self.state_manager  = ReportStateManager(
-            os.path.join(os.path.dirname(mapping_path), "report_state.json")
+            os.path.join(os.path.dirname(mapping_path), "report_state.json"),
+            scope=profile_slug,
         )
         if openpyxl is None:
             raise ImportError("openpyxl is required for ReportGenerator")

@@ -1,0 +1,251 @@
+{
+  "config": {
+    "output_dir": "S:/Documents/Novocib/COA",
+    "date_format": "%d/%m/%Y",
+    "profile_name": "coa_mapping"
+  },
+  "sample_name": {
+    "column": "sample name",
+    "placeholder": "{{sample_name}}"
+  },
+  "coa_number": {
+    "column": "coa number",
+    "placeholder": "{{coa_number}}"
+  },
+  "reception_date": {
+    "column": "reception date",
+    "placeholder": "{{reception_date}}",
+    "operations": [
+      {
+        "type": "date_format",
+        "format": "%d/%m/%Y"
+      }
+    ]
+  },
+  "shipping_number": {
+    "column": "shipping number",
+    "placeholder": "{{shipping_number}}"
+  },
+  "reception_temperature": {
+    "column": "reception temperature",
+    "placeholder": "{{reception_temperature}}"
+  },
+  "start_date": {
+    "column": "start date",
+    "placeholder": "{{start_date}}",
+    "operations": [
+      {
+        "type": "date_format",
+        "format": "%d/%m/%Y"
+      }
+    ]
+  },
+  "end_date": {
+    "column": "end date",
+    "placeholder": "{{end_date}}",
+    "operations": [
+      {
+        "type": "date_format",
+        "format": "%d/%m/%Y"
+      }
+    ]
+  },
+  "smpl_quantity": {
+    "column": "smpl quantity",
+    "placeholder": "{{smpl_quantity}}"
+  },
+  "packaging": {
+    "column": "packaging",
+    "placeholder": "{{packaging}}"
+  },
+  "date_report": {
+    "operation": "today",
+    "format": "%d/%m/%Y",
+    "placeholder": "{{date_report}}"
+  },
+  "cytosine": {
+    "column": "Cytosine",
+    "placeholder": "{{cytosine}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "uracyl": {
+    "column": "Uracyl",
+    "placeholder": "{{uracyl}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "guanine": {
+    "column": "Guanine",
+    "placeholder": "{{guanine}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "hypoxanthine": {
+    "column": "Hypoxanthine",
+    "placeholder": "{{hypoxanthine}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "adenine": {
+    "column": "Adenine",
+    "placeholder": "{{adenine}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "cytidine": {
+    "column": "Cytidine",
+    "placeholder": "{{cytidine}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "uridine": {
+    "column": "Uridine",
+    "placeholder": "{{uridine}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "guanosine": {
+    "column": "Guanosine",
+    "placeholder": "{{guanosine}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "inosine": {
+    "column": "Inosine",
+    "placeholder": "{{inosine}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "adenosine": {
+    "column": "Adenosine",
+    "placeholder": "{{adenosine}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "na2_cmp": {
+    "column": "CMP",
+    "placeholder": "{{na2_cmp}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "na2_ump": {
+    "column": "UMP",
+    "placeholder": "{{na2_ump}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "na2_gmp": {
+    "column": "GMP",
+    "placeholder": "{{na2_gmp}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "na2_imp": {
+    "column": "IMP",
+    "placeholder": "{{na2_imp}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "na2_amp": {
+    "column": "AMP",
+    "placeholder": "{{na2_amp}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "na2_rna": {
+    "column": "RNA",
+    "placeholder": "{{na2_rna}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "dna": {
+    "column": "DNA",
+    "placeholder": "{{dna}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "total_nuclotides": {
+    "column": "TPAN",
+    "placeholder": "{{total_nuclotides}}",
+    "operations": [
+      {
+        "type": "number_format",
+        "decimals": 2
+      }
+    ]
+  },
+  "file_name": {
+    "name": "NOVOCIB Certificate of Analysis",
+    "operation": "format",
+    "format": "{name} {coa_number}.docx"
+  }
+}

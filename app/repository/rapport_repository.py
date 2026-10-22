@@ -6,15 +6,10 @@ import datetime
 
 
 def _get_db_path() -> str:
-    # When frozen by PyInstaller, use the temporary _MEIPASS directory.
-    # When running normally, use the directory of this file.
-    base_dir = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
-    db_path = os.path.join(base_dir, "app_data.db")
-
-    # Ensure the directory exists (important when running from the .exe)
-    os.makedirs(os.path.dirname(db_path), exist_ok=True)
-
-    return db_path
+    # Share the persistent database used by config_repository. (This module used
+    # to look in PyInstaller's _MEIPASS temp folder, which is wiped on every exit.)
+    from app.repository import config_repository
+    return config_repository._get_db_path()
 
 
 def _get_connection():
@@ -79,19 +74,24 @@ def list_reports() -> list[dict]:
 
 # ── Report state (replaces report_state.json) ─────────────────────────────────
 
-def get_last_report_number() -> str | None:
+def _counter_key(scope: str | None) -> str:
+    return f"last_report_number:{scope}" if scope else "last_report_number"
+
+
+def get_last_report_number(scope: str | None = None) -> str | None:
+    """Last generated yymmdd-NN number. `scope` = profile slug (None = global/legacy)."""
     with _get_connection() as conn:
         row = conn.execute(
-            "SELECT value FROM report_state WHERE key = 'last_report_number'"
+            "SELECT value FROM report_state WHERE key = ?", (_counter_key(scope),)
         ).fetchone()
         return row[0] if row else None
 
 
-def set_last_report_number(value: str) -> None:
+def set_last_report_number(value: str, scope: str | None = None) -> None:
     with _get_connection() as conn:
         conn.execute(
-            "INSERT INTO report_state (key, value) VALUES ('last_report_number', ?) "
+            "INSERT INTO report_state (key, value) VALUES (?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (value,),
+            (_counter_key(scope), value),
         )
         conn.commit()

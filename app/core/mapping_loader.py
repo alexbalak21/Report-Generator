@@ -29,6 +29,14 @@ class MappingLoader:
                     rules["file_name"] = {**rules["file_name"], "name": derived_name}
         return rules
 
+    def load_raw(self) -> dict:
+        """Return the whole mapping (config + rules), from .json or .xlsx."""
+        return self._load_raw()
+
+    def save_raw(self, raw: dict) -> None:
+        """Write the whole mapping back (.json or .xlsx)."""
+        self._save_raw(raw)
+
     def load_config(self) -> dict:
         """Return the 'config' block, or an empty dict if absent."""
         return self._load_raw().get("config", {})

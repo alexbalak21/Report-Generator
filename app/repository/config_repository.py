@@ -3,7 +3,16 @@ import os
 import sys
 
 
+# Optional override of the database file (tests set this).
+DB_PATH: str | None = None
+
+
 def _get_db_path() -> str:
+    override = DB_PATH or os.environ.get("REPORT_GENERATOR_DB")
+    if override:
+        os.makedirs(os.path.dirname(os.path.abspath(override)), exist_ok=True)
+        return override
+
     if getattr(sys, "frozen", False):
         # Frozen exe: store DB in %APPDATA%\ReportGenerator\ (always writable)
         base_dir = os.path.join(os.environ["APPDATA"], "ReportGenerator")
@@ -30,6 +39,18 @@ def _get_connection():
         CREATE TABLE IF NOT EXISTS mappings (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             mapping_path TEXT NOT NULL UNIQUE
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS profiles (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            slug        TEXT NOT NULL UNIQUE,
+            name        TEXT NOT NULL,
+            folder      TEXT NOT NULL,
+            next_line   INTEGER NOT NULL DEFAULT 2,
+            output_dir  TEXT,
+            last_used   TEXT
         )
     """)
 
@@ -95,4 +116,63 @@ def mapping_delete(mapping_id: int) -> None:
         conn.execute(
             "DELETE FROM mappings WHERE id = ?", (mapping_id,)
         )
+        conn.commit()
+
+
+
+# ── Profiles ──────────────────────────────────────────────────────────────────
+
+_PROFILE_COLUMNS = ("slug", "name", "folder", "next_line", "output_dir", "last_used")
+_PROFILE_UPDATABLE = {"name", "folder", "next_line", "output_dir", "last_used"}
+
+
+def _profile_row(row) -> dict:
+    return dict(zip(_PROFILE_COLUMNS, row))
+
+
+def profile_list() -> list[dict]:
+    with _get_connection() as conn:
+        rows = conn.execute(
+            f"SELECT {', '.join(_PROFILE_COLUMNS)} FROM profiles ORDER BY name COLLATE NOCASE"
+        ).fetchall()
+        return [_profile_row(r) for r in rows]
+
+
+def profile_get(slug: str) -> dict | None:
+    with _get_connection() as conn:
+        row = conn.execute(
+            f"SELECT {', '.join(_PROFILE_COLUMNS)} FROM profiles WHERE slug = ?", (slug,)
+        ).fetchone()
+        return _profile_row(row) if row else None
+
+
+def profile_add(slug: str, name: str, folder: str,
+                next_line: int = 2, output_dir: str | None = None) -> None:
+    with _get_connection() as conn:
+        conn.execute(
+            "INSERT INTO profiles (slug, name, folder, next_line, output_dir) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (slug, name, folder, next_line, output_dir),
+        )
+        conn.commit()
+
+
+def profile_update(slug: str, **fields) -> None:
+    unknown = set(fields) - _PROFILE_UPDATABLE
+    if unknown:
+        raise ValueError(f"Unknown profile field(s): {', '.join(sorted(unknown))}")
+    if not fields:
+        return
+    assignments = ", ".join(f"{k} = ?" for k in fields)
+    with _get_connection() as conn:
+        conn.execute(
+            f"UPDATE profiles SET {assignments} WHERE slug = ?",
+            (*fields.values(), slug),
+        )
+        conn.commit()
+
+
+def profile_delete(slug: str) -> None:
+    with _get_connection() as conn:
+        conn.execute("DELETE FROM profiles WHERE slug = ?", (slug,))
         conn.commit()

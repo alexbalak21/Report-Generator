@@ -23,10 +23,12 @@ def _peek_report_number(state_mgr: ReportStateManager) -> str:
 
 
 def resolve_output_path(mapping_path: str, excel_path: str,
-                        docx_path: str, row_number: int) -> tuple[str, str]:
+                        docx_path: str, row_number: int,
+                        profile_slug: str | None = None,
+                        output_dir: str | None = None) -> tuple[str, str]:
     """
     Compute the suggested (directory, filename) for the Save As dialog.
-    Priority for output dir: SQLite last_output_dir > JSON output_dir > cwd.
+    Priority for output dir: profile output_dir > SQLite last_output_dir > JSON output_dir > cwd.
     Returns (initial_dir, initial_filename).
     """
     from app.repository.config_repository import config_get
@@ -37,7 +39,8 @@ def resolve_output_path(mapping_path: str, excel_path: str,
     except Exception:
         return os.getcwd(), f"report_row_{row_number}.docx"
 
-    initial_dir   = config_get("last_output_dir") or cfg.get("output_dir") or os.getcwd()
+    initial_dir   = (output_dir or config_get("last_output_dir")
+                     or cfg.get("output_dir") or os.getcwd())
     date_format   = cfg.get("date_format", "%d/%m/%Y")
     report_prefix = cfg.get("report_prefix", "")
 
@@ -46,7 +49,7 @@ def resolve_output_path(mapping_path: str, excel_path: str,
         return initial_dir, f"report_row_{row_number}.docx"
 
     try:
-        gen = ReportGenerator(excel_path, docx_path, mapping_path)
+        gen = ReportGenerator(excel_path, docx_path, mapping_path, profile_slug=profile_slug)
 
         # Peek at the next report number WITHOUT consuming it
         peeked_number = _peek_report_number(gen.state_manager)
@@ -137,7 +140,8 @@ def resolve_output_path(mapping_path: str, excel_path: str,
 
 
 def generate_report(excel: str, docx: str, mapping: str,
-                    row_number: int, output_path: str) -> str:
+                    row_number: int, output_path: str,
+                    profile_slug: str | None = None) -> str:
     """
     Run the report generator to the explicit output_path chosen by the user.
     Returns the final path.
@@ -146,6 +150,7 @@ def generate_report(excel: str, docx: str, mapping: str,
         excel_path=excel,
         template_path=docx,
         mapping_path=mapping,
+        profile_slug=profile_slug,
     )
     final_path = generator.generate(row_number=row_number, output_path=output_path)
     _log_report(excel, docx, mapping, row_number)

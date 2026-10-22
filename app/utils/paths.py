@@ -24,3 +24,19 @@ def get_data_path(filename: str) -> str:
 def get_resource_path(filename: str) -> str:
     """Files bundled via PyInstaller datas[] (e.g. icon.ico)."""
     return os.path.join(_meipass_dir(), filename)
+
+
+def get_profiles_dir() -> str:
+    """
+    Root folder that holds one sub-folder per profile.
+    Override with the REPORT_GENERATOR_PROFILES env var (used by tests).
+    Frozen exe: %APPDATA%\\ReportGenerator\\profiles (always writable).
+    Dev: <project root>/profiles.
+    """
+    override = os.environ.get("REPORT_GENERATOR_PROFILES")
+    if override:
+        return override
+    if getattr(sys, "frozen", False):
+        return os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")),
+                            "ReportGenerator", "profiles")
+    return os.path.join(_exe_dir(), "profiles")
