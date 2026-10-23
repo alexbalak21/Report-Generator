@@ -208,6 +208,119 @@ class TestValidate(ProfileTestBase):
         self.assertFalse(any(s == "error" for s, _ in msgs))
 
 
+def make_lookup_files(folder, mapping, data_rows, suppliers, headers=("fournisseur fabricant", "espece", "K-value", "agrement"),
+                      placeholders=("{{agrement}}", "{{k_value}}")):
+    os.makedirs(folder, exist_ok=True)
+    m = os.path.join(folder, "m.json"); json.dump(mapping, open(m, "w", encoding="utf-8"))
+    wb = Workbook(); ws = wb.active; ws.title = "Data"; ws.append(list(headers))
+    for r in data_rows:
+        ws.append(list(r))
+    f = wb.create_sheet("fournisseurs"); f.append(["Fournisseur", "Numero agrement"])
+    for r in suppliers:
+        f.append(list(r))
+    e = wb.create_sheet("especes"); e.append(["Nom Latin", "Nom Français"])
+    e.append(["Thunnus albacares", "Thon albacore"])
+    c = wb.create_sheet("crit"); c.append(["Espece", "Critere"]); c.append(["Thon albacore", "Crit A"])
+    d = os.path.join(folder, "d.xlsx"); wb.save(d)
+    t = os.path.join(folder, "t.docx"); doc = Document()
+    for ph in placeholders:
+        doc.add_paragraph(ph)
+    doc.save(t)
+    return m, t, d
+
+
+LOOKUP = {"config": {"data_sheet": "Data"},
+          "agrement": {"operation": "lookup", "sheet": "fournisseurs", "key": "Fournisseur",
+                       "match": "fournisseur fabricant", "value": "Numero agrement",
+                       "placeholder": "{{agrement}}"},
+          "k-value": {"column": "K-value", "placeholder": "{{k_value}}"}}
+
+
+class TestChecks(ProfileTestBase):
+    def _profile(self, mapping, rows, suppliers=(("ACME", "FR1"),), **kw):
+        m, t, d = make_lookup_files(os.path.join(self.tmp, "chk"), mapping, rows, suppliers, **kw)
+        return self.pm.create("Chk", mapping=m, template=t, data=d)
+
+    def msgs(self, p, **kw):
+        return [i.message for i in self.pm.validate(p.slug, **kw)]
+
+    def test_clean_lookup_has_no_issues_and_matches_like_the_generator(self):
+        # generator compares stripped + case-insensitive, so these all resolve
+        p = self._profile(LOOKUP, [("acme", "x", 1, ""), ("ACME\xa0", "x", 2, ""), (" Acme ", "x", 3, "")])
+        self.assertEqual(self.msgs(p), [])
+
+    def test_missing_lookup_values_reported_with_rows_and_fallback_hint(self):
+        p = self._profile(LOOKUP, [("ACME", "x", 1, ""), ("big fish", "x", 2, "FAO 51"),
+                                   ("big fish", "x", 3, ""), ("other", "x", 4, "")])
+        found = [m for m in self.msgs(p) if "Field 'agrement'" in m]
+        self.assertEqual(len(found), 1)
+        msg = found[0]
+        self.assertIn("2 value(s) of 'fournisseur fabricant'", msg)
+        self.assertIn("{{agrement}} will be empty for 3 row(s)", msg)
+        self.assertIn("'big fish' (rows 3, 4)", msg)
+        self.assertIn("own 'agrement' column", msg)
+        self.assertEqual(self.msgs(p, deep=False), [])             # quick check skips data rows
+
+    def test_did_you_mean_for_near_miss_supplier(self):
+        p = self._profile(LOOKUP, [("Acme Seafood", "x", 1, "")], suppliers=(("ACME Seafod", "FR1"),))
+        self.assertTrue(any("did you mean 'ACME Seafod'" in m for m in self.msgs(p)))
+
+    def test_found_but_blank_value(self):
+        p = self._profile(LOOKUP, [("ACME", "x", 1, "")], suppliers=(("ACME", None),))
+        self.assertTrue(any("found but the looked-up cell is empty" in m for m in self.msgs(p)))
+
+    def test_empty_input_cells_are_not_reported(self):
+        p = self._profile(LOOKUP, [(None, "x", 1, ""), ("", "x", 2, "")])
+        self.assertEqual(self.msgs(p), [])
+
+    def test_column_hint_k_value(self):
+        mp = {**LOOKUP, "k-value": {"column": "k value", "placeholder": "{{k_value}}"}}
+        p = self._profile(mp, [("ACME", "x", 1, "")])
+        msg = [m for m in self.msgs(p) if "k value" in m][0]
+        self.assertIn("Did you mean 'K-value'?", msg)
+
+    def test_template_placeholder_without_mapping(self):
+        p = self._profile(LOOKUP, [("ACME", "x", 1, "")], placeholders=("{{agrement}}", "{{k_value}}", "{{n_ech}}"))
+        self.assertEqual([m for m in self.msgs(p) if "n_ech" in m],
+                         ["Template placeholder {{n_ech}} is not filled by any field in the mapping "
+                          "— it will stay as {{n_ech}} in the report."])
+
+    def test_computed_field_without_placeholder_key_is_covered_by_its_key(self):
+        mp = {**LOOKUP, "date_du_jour": {"operation": "today", "format": "%d/%m/%Y"},
+              "numero_rapport": {"operation": "report_number"}}
+        p = self._profile(mp, [("ACME", "x", 1, "")],
+                          placeholders=("{{agrement}}", "{{k_value}}", "{{date_du_jour}}", "{{numéro_rapport}}"))
+        self.assertEqual(self.msgs(p), [])
+
+    def test_lookup_structure_errors(self):
+        bad = {**LOOKUP, "agrement": {**LOOKUP["agrement"], "sheet": "fournisseur", "value": "x"}}
+        p = self._profile(bad, [("ACME", "x", 1, "")])
+        m = self.msgs(p)
+        self.assertTrue(any("sheet 'fournisseur' not found" in x and "Did you mean 'fournisseurs'" in x for x in m))
+        bad2 = {**LOOKUP, "agrement": {**LOOKUP["agrement"], "key": "fournisseur", "match": "fournisseur"}}
+        p2 = self.pm.replace_mapping(p.slug, self._write(bad2)) or p
+        m2 = self.msgs(p2)
+        self.assertTrue(any("column 'fournisseur' not found in sheet 'fournisseurs'" in x for x in m2))
+        self.assertTrue(any("match column 'fournisseur' not found in the data sheet" in x for x in m2))
+
+    def _write(self, mapping):
+        path = os.path.join(self.tmp, "tmp_map.json"); json.dump(mapping, open(path, "w")); return path
+
+    def test_lookup_join_chain(self):
+        join = {"config": {"data_sheet": "Data"},
+                "crit": {"operation": "lookup_join", "placeholder": "{{agrement}}", "steps": [
+                    {"sheet": "especes", "key": "Nom Latin", "match": "espece", "value": "Nom Français"},
+                    {"sheet": "crit", "key": "Espece", "match": "<previous>", "value": "Critere"}]}}
+        ok = self._profile(join, [("a", "Thunnus albacares", 1, "")], placeholders=("{{agrement}}",))
+        self.assertEqual(self.msgs(ok), [])
+        self.pm.delete(ok.slug)
+        p = self._profile(join, [("a", "Thunnus albacares", 1, ""), ("a", "Thunnus obesus", 2, "")],
+                          placeholders=("{{agrement}}",))
+        m = [x for x in self.msgs(p) if "Field 'crit'" in x]
+        self.assertEqual(len(m), 1)
+        self.assertIn("'Thunnus obesus' (row 3)", m[0])
+
+
 class TestExportImport(ProfileTestBase):
     def test_roundtrip(self):
         p = self.pm.create("COA", mapping=self.m, template=self.t, data=self.d)

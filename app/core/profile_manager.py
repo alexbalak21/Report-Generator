@@ -20,7 +20,9 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.core import profile_checks
 from app.core.mapping_loader import MappingLoader
+from app.core.profile_checks import Issue, placeholder_name
 from app.repository import config_repository as repo
 from app.utils.paths import get_profiles_dir, get_data_path
 
@@ -39,17 +41,9 @@ _WINDOWS_RESERVED = {"con", "prn", "aux", "nul",
                      *(f"com{i}" for i in range(1, 10)),
                      *(f"lpt{i}" for i in range(1, 10))}
 
-_PLACEHOLDER_RE = re.compile(r"\{\{(.*?)\}\}")
-
 
 class ProfileError(Exception):
     """Raised for user-facing profile problems (bad name, missing file, …)."""
-
-
-@dataclass
-class Issue:
-    severity: str   # "error" | "warning"
-    message: str
 
 
 @dataclass
@@ -353,11 +347,32 @@ class ProfileManager:
             raise ProfileError(f"File not found: {src}")
         shutil.copy2(src, dest)
 
+    def file_info(self, slug: str) -> dict[str, dict]:
+        """{filename: {"exists", "size", "modified"}} for the three profile files."""
+        profile = self.get(slug)
+        info = {}
+        for filename in PROFILE_FILES:
+            path = profile.folder / filename
+            if path.is_file():
+                st = path.stat()
+                info[filename] = {
+                    "exists": True, "size": st.st_size,
+                    "modified": datetime.datetime.fromtimestamp(st.st_mtime),
+                }
+            else:
+                info[filename] = {"exists": False, "size": 0, "modified": None}
+        return info
+
     # ------------------------------------------------------------------
     # Validation
     # ------------------------------------------------------------------
 
-    def validate(self, slug: str) -> list[Issue]:
+    def validate(self, slug: str, deep: bool = True) -> list[Issue]:
+        """
+        Check a profile. deep=True also runs every lookup rule over the data rows
+        (finds values that would leave a placeholder empty); it reads the whole
+        workbook, so pass deep=False for a quick structural check.
+        """
         issues: list[Issue] = []
         profile = self.get(slug)
 
@@ -415,13 +430,27 @@ class ProfileManager:
                     continue
                 column = str(rule.get("column", "")).strip()
                 if headers is not None and column and column not in headers:
+                    hint = profile_checks._did_you_mean(column, headers)
                     issues.append(Issue(
-                        "warning", f"Field '{key}': column '{column}' not found in the data sheet."))
-                match = _PLACEHOLDER_RE.search(str(rule.get("placeholder", "")))
-                if placeholders is not None and match and match.group(1).strip() not in placeholders:
+                        "warning", f"Field '{key}': column '{column}' not found in the data sheet.{hint}"))
+                name = placeholder_name(rule.get("placeholder"))
+                if placeholders is not None and name and name not in placeholders:
                     issues.append(Issue(
-                        "warning", f"Field '{key}': placeholder {{{{{match.group(1).strip()}}}}} "
+                        "warning", f"Field '{key}': placeholder {{{{{name}}}}} "
                                    f"not found in the template."))
+
+            if placeholders is not None:
+                issues.extend(profile_checks.check_placeholder_coverage(mapping, placeholders))
+
+            if data_ok and headers is not None:
+                try:
+                    sheets = profile_checks.read_all_headers(profile.data_path)
+                    issues.extend(profile_checks.check_lookup_structure(mapping, headers, sheets))
+                    if deep:
+                        issues.extend(profile_checks.check_lookup_data(
+                            mapping, config, profile.data_path))
+                except Exception as exc:
+                    issues.append(Issue("warning", f"Could not check the lookups: {exc}"))
         return issues
 
     @staticmethod

@@ -21,7 +21,7 @@ from app.gui.line_selector import LineSelector
 from app.gui.config_persistence import load_mapping_config
 from app.gui.report_actions import resolve_output_path, generate_report
 from app.gui.windows.generation_complete_dialog import GenerationCompleteDialog
-from app.gui.windows.profile_dialogs import NewProfileDialog
+from app.gui.windows.profile_dialogs import NewProfileDialog, UpdateProfileDialog
 from app.utils.paths import get_resource_path
 
 _STATE_PATH = os.path.abspath(
@@ -95,6 +95,7 @@ class MainWindow(tk.Tk):
 
         for i in range(9):
             self.bind_all(f"<Control-Key-{i + 1}>", lambda _e, i=i: self._select_by_index(i))
+        self.bind_all("<F5>", lambda _e: self.on_refresh_profile())
 
         self._update_preview()
 
@@ -107,10 +108,14 @@ class MainWindow(tk.Tk):
         )
         self.profile_combobox.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.profile_combobox.bind("<<ComboboxSelected>>", lambda *_: self._on_profile_selected())
-        ttk.Button(frame, text="New…", command=self.on_new_profile, width=10).pack(side="left")
+        ttk.Button(frame, text="New…", command=self.on_new_profile, width=8).pack(side="left")
+        ttk.Button(frame, text="Update…", command=self.on_update_profile, width=9).pack(side="left", padx=(6, 0))
 
         self._profile_menu = tk.Menu(self, tearoff=0)
         for label, cmd in (
+            ("Update profile…",         self.on_update_profile),
+            ("Refresh (F5)",            self.on_refresh_profile),
+            (None, None),
             ("Rename…",                 self.on_rename_profile),
             ("Duplicate…",              self.on_duplicate_profile),
             (None, None),
@@ -143,7 +148,8 @@ class MainWindow(tk.Tk):
         self._status_label = ttk.Label(frame, textvariable=self.status_var, anchor="w")
         self._status_label.pack(side="left", fill="x", expand=True)
         self._details_btn = ttk.Button(frame, text="Details…", width=10, command=self.on_show_issues)
-        self._details_btn.pack(side="left", padx=(8, 0))
+        self._details_btn.pack(side="right")
+        ttk.Button(frame, text="⟳ Refresh", width=10, command=self.on_refresh_profile).pack(side="right", padx=(0, 6))
 
     def _files_row(self):
         frame = ttk.Frame(self)
@@ -364,11 +370,15 @@ class MainWindow(tk.Tk):
         slug = self._current_slug
         if not slug:
             return
+        self.configure(cursor="watch")
+        self.update_idletasks()
         try:
             self._issues = self.profiles.validate(slug)
         except Exception as exc:
             from app.core.profile_manager import Issue
             self._issues = [Issue("error", f"Could not check the profile: {exc}")]
+        finally:
+            self.configure(cursor="")
 
         errors   = [i for i in self._issues if i.severity == "error"]
         warnings = [i for i in self._issues if i.severity == "warning"]
@@ -397,6 +407,47 @@ class MainWindow(tk.Tk):
             messagebox.showinfo("Profile", "Create or select a profile first.")
             return None
         return self._current_slug
+
+    def on_refresh_profile(self):
+        """Re-read the profile's files from disk (mapping, template, data) and re-check them."""
+        self._refresh_profiles()                       # also picks up folders added/removed by hand
+        slugs = list(self._profile_slugs.values())
+        if self._current_slug in slugs:
+            self._activate(self._current_slug)
+        elif slugs:
+            self._activate(slugs[0])
+        else:
+            self._show_no_profile()
+
+    def on_update_profile(self):
+        """Same window as 'New…', for the current profile: rename it and/or replace its files."""
+        slug = self._require_profile()
+        if not slug:
+            return
+        profile = self.profiles.get(slug)
+        dialog = UpdateProfileDialog(self, profile.name, self.profiles.file_info(slug))
+        if not dialog.result:
+            return
+        r = dialog.result
+        done = []
+        try:
+            if r["name"] != profile.name:
+                self.profiles.rename(slug, r["name"])
+                done.append("name")
+            if r["mapping"]:
+                self.profiles.replace_mapping(slug, r["mapping"])
+                done.append("mapping")
+            if r["template"]:
+                self.profiles.replace_template(slug, r["template"])
+                done.append("template")
+            if r["data"]:
+                self.profiles.replace_data(slug, r["data"])
+                done.append("data")
+        except (ProfileError, OSError, ValueError) as exc:
+            extra = f"\n\nAlready applied: {', '.join(done)}." if done else ""
+            messagebox.showerror("Update profile", f"{exc}{extra}")
+        self._refresh_profiles()
+        self._activate(slug)
 
     # ---- create / rename / duplicate / delete ----------------------------
 
