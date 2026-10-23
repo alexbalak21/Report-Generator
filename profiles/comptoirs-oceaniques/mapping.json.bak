@@ -45,8 +45,15 @@
     "placeholder": "{{date_heure_prelevment}}"
   },
   "adresse prelevement": {
-    "column": "adresse prelevement",
-    "placeholder": "{{adresse_prelevement}}"
+    "column": "adresse entreprise client",
+    "placeholder": "{{adresse_prelevement}}",
+    "operations": [
+      {
+        "type": "replace",
+        "find": ", ",
+        "replace": "\\n"
+      }
+    ]
   },
   "ville prelevement": {
     "column": "ville prelevement",
@@ -157,8 +164,8 @@
       }
     ]
   },
-  "k value": {
-    "column": "k value",
+  "k-value": {
+    "column": "K-value",
     "placeholder": "{{k_value}}",
     "operations": [
       {

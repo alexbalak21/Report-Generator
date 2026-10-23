@@ -439,6 +439,8 @@ class ProfileManager:
                         "warning", f"Field '{key}': placeholder {{{{{name}}}}} "
                                    f"not found in the template."))
 
+            issues.extend(profile_checks.check_operations(mapping))
+            issues.extend(profile_checks.check_file_name(mapping, headers))
             if placeholders is not None:
                 issues.extend(profile_checks.check_placeholder_coverage(mapping, placeholders))
 

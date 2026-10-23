@@ -22,6 +22,8 @@ from app.gui.config_persistence import load_mapping_config
 from app.gui.report_actions import resolve_output_path, generate_report
 from app.gui.windows.generation_complete_dialog import GenerationCompleteDialog
 from app.gui.windows.profile_dialogs import NewProfileDialog, UpdateProfileDialog
+from app.gui.windows.guide_dialog import GuideDialog
+from app.core.guide import build_profile_context
 from app.utils.paths import get_resource_path
 
 _STATE_PATH = os.path.abspath(
@@ -34,7 +36,7 @@ class MainWindow(tk.Tk):
         super().__init__()
 
         self.title("Report Generator")
-        self.geometry("640x540")
+        self.geometry("640x580")
         self.resizable(False, False)
         icon_path = get_resource_path("icon.ico")
         if os.path.exists(icon_path):
@@ -91,7 +93,11 @@ class MainWindow(tk.Tk):
             self, text="Generate report",
             command=self.on_generate_report,
         )
-        self._generate_btn.pack(pady=(8, 16), ipadx=20, ipady=6)
+        self._generate_btn.pack(pady=(8, 10), ipadx=20, ipady=6)
+
+        ttk.Separator(self, orient="horizontal").pack(fill="x", padx=14, pady=(0, 6))
+        ttk.Button(self, text="📖 Guide — how the app, mappings, templates and data work",
+                   command=self.on_open_guide).pack(pady=(0, 10))
 
         for i in range(9):
             self.bind_all(f"<Control-Key-{i + 1}>", lambda _e, i=i: self._select_by_index(i))
@@ -407,6 +413,25 @@ class MainWindow(tk.Tk):
             messagebox.showinfo("Profile", "Create or select a profile first.")
             return None
         return self._current_slug
+
+    def on_open_guide(self):
+        """Open the guide (one window at a time); it can copy itself + the active profile for an AI."""
+        existing = getattr(self, "_guide_window", None)
+        try:
+            if existing is not None and existing.winfo_exists():
+                existing.lift()
+                existing.focus_set()
+                return
+        except tk.TclError:
+            pass
+        self._guide_window = GuideDialog(self, context_provider=self._profile_context)
+
+    def _profile_context(self):
+        """Markdown description of the active profile (fresh check, headers only — no cell values)."""
+        slug = self._current_slug
+        if not slug:
+            return None
+        return build_profile_context(self.profiles.get(slug), self.profiles.validate(slug))
 
     def on_refresh_profile(self):
         """Re-read the profile's files from disk (mapping, template, data) and re-check them."""

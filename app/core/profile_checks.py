@@ -17,6 +17,16 @@ _REPORT_NUMBER_KEYS = ("sample_number", "numero_rapport")
 _REPORT_NUMBER_PLACEHOLDERS = {"numéro_rapport", "sample_number"}
 
 
+# Operation names the engine understands (keep in sync with processors.py / the guide).
+COLUMN_OPERATIONS = ("formula", "multiply", "divide", "add", "subtract", "round",
+                     "number_format", "date_format", "suffix", "prefix", "upper",
+                     "lower", "strip", "replace")
+COMPUTED_OPERATIONS = ("today", "uppercase", "lowercase", "format", "concat",
+                       "report_number", "report_prefix", "excel_day_counter",
+                       "lookup", "lookup_join")
+_NUMERIC_VALUE_OPS = ("multiply", "divide", "add", "subtract")
+
+
 @dataclass
 class Issue:
     severity: str   # "error" | "warning"
@@ -99,11 +109,12 @@ def covered_placeholders(mapping: dict) -> set[str]:
             if name:
                 covered.add(name)
         elif isinstance(rule, dict):
-            name = placeholder_name(rule.get("placeholder"))
-            if name:
-                covered.add(name)
-            elif "operation" in rule:                   # computed field: {{<key>}}
-                covered.add(str(key))
+            if "operation" in rule:                     # computed field: ALWAYS {{<key>}}
+                covered.add(str(key))                   # (its "placeholder" value is ignored)
+            else:
+                name = placeholder_name(rule.get("placeholder"))
+                if name:
+                    covered.add(name)
     if any(k in mapping for k in _REPORT_NUMBER_KEYS):
         covered |= _REPORT_NUMBER_PLACEHOLDERS
     return covered
@@ -208,7 +219,7 @@ def check_lookup_data(mapping: dict, config: dict, data_path: str,
         except LookupError:
             continue                                    # sheet/column problems: reported by the structure check
 
-        placeholder = placeholder_name(rule.get("placeholder")) or key
+        placeholder = key                               # computed fields always use {{<key>}}
         first = steps[0]
         fallback = (f" The data sheet also has its own '{key}' column you could use instead."
                     if key in data_headers else "")
@@ -222,8 +233,8 @@ def check_lookup_data(mapping: dict, config: dict, data_path: str,
             issues.append(Issue(
                 "warning",
                 f"Field '{key}': {len(not_found)} value(s) of '{primary}' have no match in sheet "
-                f"'{first.get('sheet')}' — {{{{{placeholder}}}}} will be empty for "
-                f"{sum(len(r) for _, r in not_found)} row(s). "
+                f"'{first.get('sheet')}' — {{{{{placeholder}}}}} will be left as {{{{{placeholder}}}}} "
+                f"in the report for {sum(len(r) for _, r in not_found)} row(s). "
                 f"e.g. {_examples(not_found, sheet_keys, max_examples)}.{fallback}"))
         if blank:
             issues.append(Issue(
@@ -245,3 +256,92 @@ def _examples(items, sheet_keys, limit: int) -> str:
         parts.append(text)
     more = len(items) - limit
     return "; ".join(parts) + (f"; +{more} more" if more > 0 else "")
+
+
+# ── 4. rule shape: operation names, parameters, computed placeholders ───────────
+
+def check_operations(mapping: dict) -> list[Issue]:
+    issues: list[Issue] = []
+    for key, rule in mapping.items():
+        if key == "config" or not isinstance(rule, dict):
+            continue
+
+        operation = rule.get("operation")
+        if operation is not None and operation not in COMPUTED_OPERATIONS:
+            issues.append(Issue(
+                "warning", f"Field '{key}': unknown operation '{operation}' — the field is never "
+                           f"filled. Known: {', '.join(COMPUTED_OPERATIONS)}."))
+
+        if key != "file_name" and operation is not None:
+            ph = placeholder_name(rule.get("placeholder"))
+            if ph and ph != key:
+                issues.append(Issue(
+                    "warning", f"Field '{key}': for calculated fields the placeholder in the template "
+                               f"is always {{{{{key}}}}} (the field name); the placeholder "
+                               f"{{{{{ph}}}}} is ignored. Rename the field to '{ph}' or change the template."))
+
+        if operation is None and "column" not in rule and key != "file_name":
+            issues.append(Issue(
+                "warning", f"Field '{key}' has neither a 'column' nor an 'operation' — it does nothing."))
+
+        ops = rule.get("operations")
+        if ops is None:
+            continue
+        if not isinstance(ops, list):
+            issues.append(Issue("warning", f"Field '{key}': 'operations' must be a list."))
+            continue
+        for number, op in enumerate(ops, start=1):
+            where = f"Field '{key}', operation {number}"
+            if not isinstance(op, dict):
+                issues.append(Issue("warning", f"{where}: must be an object like {{\"type\": \"round\"}}."))
+                continue
+            kind = op.get("type")
+            if kind not in COLUMN_OPERATIONS:
+                issues.append(Issue(
+                    "warning", f"{where}: unknown type '{kind}' — it is ignored. "
+                               f"Known: {', '.join(COLUMN_OPERATIONS)}."
+                               + _did_you_mean(str(kind), COLUMN_OPERATIONS)))
+                continue
+            if kind in ("round", "number_format") and "decimals" in op:
+                try:
+                    int(op["decimals"])
+                except (TypeError, ValueError):
+                    issues.append(Issue("warning", f"{where}: 'decimals' must be a whole number "
+                                                   f"(got {op['decimals']!r}) — the operation is skipped."))
+            if kind in _NUMERIC_VALUE_OPS and "value" in op:
+                try:
+                    float(op["value"])
+                except (TypeError, ValueError):
+                    issues.append(Issue("warning", f"{where}: 'value' must be a number "
+                                                   f"(got {op['value']!r}) — 0 is used instead."))
+            if kind == "replace" and not op.get("find"):
+                issues.append(Issue("warning", f"{where}: 'replace' needs a 'find' text."))
+    return issues
+
+
+def check_file_name(mapping: dict, data_headers: set[str] | None) -> list[Issue]:
+    """The file_name format may only use field names, data columns, 'name' and 'report_prefix'."""
+    rule = mapping.get("file_name")
+    if not isinstance(rule, dict) or rule.get("operation") != "format":
+        return []
+    import string
+    fmt = rule.get("format")
+    if not isinstance(fmt, str):
+        return []
+    known = {k for k in mapping if k not in ("config", "file_name")}
+    known |= set(rule) | {"report_prefix"}
+    if data_headers:
+        known |= set(data_headers)
+    issues = []
+    try:
+        fields = [f for _, f, _, _ in string.Formatter().parse(fmt) if f]
+    except ValueError as exc:
+        return [Issue("warning", f"file_name: the format '{fmt}' is not valid ({exc}) — "
+                                 "the file will be called report_row_N.docx.")]
+    for field in fields:
+        base = re.split(r"[.\[]", field, maxsplit=1)[0]
+        if base not in known:
+            issues.append(Issue(
+                "warning", f"file_name: '{{{base}}}' is not a field name or data column — the file "
+                           f"will be called report_row_N.docx." + _did_you_mean(base, known)))
+    return issues

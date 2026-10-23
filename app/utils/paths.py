@@ -40,3 +40,8 @@ def get_profiles_dir() -> str:
         return os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")),
                             "ReportGenerator", "profiles")
     return os.path.join(_exe_dir(), "profiles")
+
+
+def get_app_resource_path(filename: str) -> str:
+    """Files in app/resources (e.g. guide.md): bundled via run.spec datas[] when frozen."""
+    return os.path.join(_meipass_dir(), "app", "resources", filename)

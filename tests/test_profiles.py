@@ -236,13 +236,16 @@ LOOKUP = {"config": {"data_sheet": "Data"},
           "k-value": {"column": "K-value", "placeholder": "{{k_value}}"}}
 
 
-class TestChecks(ProfileTestBase):
+class CheckHelpers:
     def _profile(self, mapping, rows, suppliers=(("ACME", "FR1"),), **kw):
         m, t, d = make_lookup_files(os.path.join(self.tmp, "chk"), mapping, rows, suppliers, **kw)
         return self.pm.create("Chk", mapping=m, template=t, data=d)
 
     def msgs(self, p, **kw):
         return [i.message for i in self.pm.validate(p.slug, **kw)]
+
+
+class TestChecks(CheckHelpers, ProfileTestBase):
 
     def test_clean_lookup_has_no_issues_and_matches_like_the_generator(self):
         # generator compares stripped + case-insensitive, so these all resolve
@@ -256,7 +259,7 @@ class TestChecks(ProfileTestBase):
         self.assertEqual(len(found), 1)
         msg = found[0]
         self.assertIn("2 value(s) of 'fournisseur fabricant'", msg)
-        self.assertIn("{{agrement}} will be empty for 3 row(s)", msg)
+        self.assertIn("{{agrement}} will be left as {{agrement}} in the report for 3 row(s)", msg)
         self.assertIn("'big fish' (rows 3, 4)", msg)
         self.assertIn("own 'agrement' column", msg)
         self.assertEqual(self.msgs(p, deep=False), [])             # quick check skips data rows
@@ -308,7 +311,7 @@ class TestChecks(ProfileTestBase):
 
     def test_lookup_join_chain(self):
         join = {"config": {"data_sheet": "Data"},
-                "crit": {"operation": "lookup_join", "placeholder": "{{agrement}}", "steps": [
+                "agrement": {"operation": "lookup_join", "placeholder": "{{agrement}}", "steps": [
                     {"sheet": "especes", "key": "Nom Latin", "match": "espece", "value": "Nom Français"},
                     {"sheet": "crit", "key": "Espece", "match": "<previous>", "value": "Critere"}]}}
         ok = self._profile(join, [("a", "Thunnus albacares", 1, "")], placeholders=("{{agrement}}",))
@@ -316,9 +319,59 @@ class TestChecks(ProfileTestBase):
         self.pm.delete(ok.slug)
         p = self._profile(join, [("a", "Thunnus albacares", 1, ""), ("a", "Thunnus obesus", 2, "")],
                           placeholders=("{{agrement}}",))
-        m = [x for x in self.msgs(p) if "Field 'crit'" in x]
+        m = [x for x in self.msgs(p) if "Field 'agrement'" in x]
         self.assertEqual(len(m), 1)
         self.assertIn("'Thunnus obesus' (row 3)", m[0])
+
+
+class TestRuleShapeChecks(CheckHelpers, ProfileTestBase):
+    def test_unknown_operation_types_are_flagged(self):
+        mp = {**LOOKUP, "k-value": {"column": "K-value", "placeholder": "{{k_value}}",
+                                    "operations": [{"type": "number_fromat", "decimals": 2}]},
+              "d": {"operation": "tody", "format": "%Y"}}
+        m = self.msgs(self._profile(mp, [("ACME", "x", 1, "")], placeholders=("{{agrement}}", "{{k_value}}", "{{d}}")))
+        self.assertTrue(any("unknown type 'number_fromat'" in x and "Did you mean 'number_format'" in x for x in m))
+        self.assertTrue(any("unknown operation 'tody'" in x for x in m))
+
+    def test_bad_parameters(self):
+        mp = {**LOOKUP, "k-value": {"column": "K-value", "placeholder": "{{k_value}}", "operations": [
+            {"type": "round", "decimals": "two"}, {"type": "multiply", "value": "x"}, {"type": "replace"}]}}
+        m = self.msgs(self._profile(mp, [("ACME", "x", 1, "")]))
+        self.assertTrue(any("'decimals' must be a whole number" in x for x in m))
+        self.assertTrue(any("'value' must be a number" in x for x in m))
+        self.assertTrue(any("'replace' needs a 'find' text" in x for x in m))
+
+    def test_computed_placeholder_must_equal_key(self):
+        mp = {**LOOKUP, "today_date": {"operation": "today", "format": "%Y", "placeholder": "{{date_du_jour}}"}}
+        m = self.msgs(self._profile(mp, [("ACME", "x", 1, "")],
+                                    placeholders=("{{agrement}}", "{{k_value}}", "{{date_du_jour}}")))
+        self.assertTrue(any("placeholder in the template is always {{today_date}}" in x for x in m))
+        # ...and the template placeholder is therefore reported as not filled
+        self.assertTrue(any("Template placeholder {{date_du_jour}} is not filled" in x for x in m))
+
+    def test_rule_that_does_nothing(self):
+        mp = {**LOOKUP, "oops": {"placeholder": "{{oops}}"}}
+        self.assertTrue(any("Field 'oops' has neither" in x for x in self.msgs(self._profile(mp, [("ACME", "x", 1, "")]))))
+
+    def test_file_name_fields(self):
+        mp = {**LOOKUP, "file_name": {"name": "COA", "operation": "format", "format": "{name} {coa_numbr}.docx"}}
+        m = self.msgs(self._profile(mp, [("ACME", "x", 1, "")]))
+        self.assertTrue(any("file_name: '{coa_numbr}' is not a field name" in x for x in m))
+        ok = {**LOOKUP, "file_name": {"name": "COA", "operation": "format",
+                                      "format": "{name} {k-value} {fournisseur fabricant} {report_prefix}.docx"}}
+        self.pm.delete(self.pm.list()[0].slug)
+        self.assertEqual(self.msgs(self._profile(ok, [("ACME", "x", 1, "")])), [])
+
+    def test_report_json_examples_from_real_mappings_have_no_false_positives(self):
+        # the shape of the user's real mapping: computed fields keyed like their placeholders
+        mp = {"config": {"data_sheet": "Data"},
+              "agrement": LOOKUP["agrement"], "k-value": LOOKUP["k-value"],
+              "numero_rapport": {"operation": "excel_day_counter", "date_column": "x", "date_format": "%d/%m/%Y"},
+              "date_du_jour": {"operation": "today", "format": "%d/%m/%Y", "placeholder": "{{date_du_jour}}"},
+              "file_name": {"name": "N", "operation": "format", "format": "{name} {numero_rapport}.docx"}}
+        m = self.msgs(self._profile(mp, [("ACME", "x", 1, "")],
+                                    placeholders=("{{agrement}}", "{{k_value}}", "{{date_du_jour}}", "{{numéro_rapport}}")))
+        self.assertEqual(m, [])
 
 
 class TestExportImport(ProfileTestBase):
