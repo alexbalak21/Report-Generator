@@ -454,23 +454,11 @@ class MainWindow(tk.Tk):
         if not dialog.result:
             return
         r = dialog.result
-        done = []
         try:
-            if r["name"] != profile.name:
-                self.profiles.rename(slug, r["name"])
-                done.append("name")
-            if r["mapping"]:
-                self.profiles.replace_mapping(slug, r["mapping"])
-                done.append("mapping")
-            if r["template"]:
-                self.profiles.replace_template(slug, r["template"])
-                done.append("template")
-            if r["data"]:
-                self.profiles.replace_data(slug, r["data"])
-                done.append("data")
+            self.profiles.update(slug, name=r["name"], mapping=r["mapping"],
+                                 template=r["template"], data=r["data"])
         except (ProfileError, OSError, ValueError) as exc:
-            extra = f"\n\nAlready applied: {', '.join(done)}." if done else ""
-            messagebox.showerror("Update profile", f"{exc}{extra}")
+            messagebox.showerror("Update profile", str(exc))
         self._refresh_profiles()
         self._activate(slug)
 

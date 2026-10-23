@@ -374,6 +374,93 @@ class TestRuleShapeChecks(CheckHelpers, ProfileTestBase):
         self.assertEqual(m, [])
 
 
+class TestUpdateIsAllOrNothing(ProfileTestBase):
+    """The 'WinError 32: file in use' case: a half-applied update must never happen."""
+
+    def setUp(self):
+        super().setUp()
+        self.p = self.pm.create("COA", mapping=self.m, template=self.t, data=self.d)
+        self.m2, self.t2, self.d2 = make_files(
+            os.path.join(self.tmp, "new"), mapping={**MAPPING, "sample_name": {"column": "sample name",
+                                                                                 "placeholder": "{{CHANGED}}"}},
+            rows=(("Other", "C-9"),), placeholders=("{{sample_name}}", "{{coa_number}}", "{{extra}}"))
+
+    def _snapshot(self):
+        return {f: open(self.p.folder / f, "rb").read() for f in (MAPPING_FILE, TEMPLATE_FILE, DATA_FILE)}
+
+    def _leftovers(self):
+        return sorted(x for x in os.listdir(self.p.folder) if x.endswith((".new", ".bak")))
+
+    def test_locked_file_blocks_everything_before_any_change(self):
+        import builtins
+        from unittest import mock
+        real_open = builtins.open
+
+        def fake_open(file, mode="r", *a, **k):           # Excel has data.xlsx open: write access refused
+            if str(file).endswith("data.xlsx") and "+" in mode:
+                raise PermissionError(13, "The process cannot access the file because it is being used "
+                                          "by another process")
+            return real_open(file, mode, *a, **k)
+
+        before = self._snapshot()
+        with mock.patch("builtins.open", fake_open):
+            with self.assertRaises(ProfileError) as cm:
+                self.pm.update(self.p.slug, name="Renamed", mapping=self.m2, template=self.t2, data=self.d2)
+        self.assertIn("data.xlsx is open in another program", str(cm.exception))
+        self.assertIn("Nothing was changed", str(cm.exception))
+        self.assertEqual(self._snapshot(), before)            # mapping + template NOT replaced (the old bug)
+        self.assertEqual(self.pm.get(self.p.slug).name, "COA")
+        self.assertEqual(self._leftovers(), [])                # no .new / .bak debris
+
+    def test_failure_during_swap_restores_files_already_replaced(self):
+        from unittest import mock
+        real_replace = os.replace
+        calls = []
+
+        def flaky_replace(src, dst):
+            calls.append(dst)
+            if len(calls) == 3:                                # mapping, template ok; data fails
+                raise PermissionError(13, "in use")
+            return real_replace(src, dst)
+
+        before = self._snapshot()
+        with mock.patch("os.replace", flaky_replace):
+            with self.assertRaises(ProfileError) as cm:
+                self.pm.update(self.p.slug, mapping=self.m2, template=self.t2, data=self.d2)
+        self.assertIn("previous files were restored", str(cm.exception))
+        self.assertEqual(self._snapshot(), before)
+        self.assertFalse([x for x in os.listdir(self.p.folder) if x.endswith(".new")])
+
+    def test_success_replaces_everything_and_keeps_backups(self):
+        before = self._snapshot()
+        got = self.pm.update(self.p.slug, name="COA v2", mapping=self.m2, template=self.t2, data=self.d2)
+        self.assertEqual(got.name, "COA v2")
+        after = self._snapshot()
+        for f in before:
+            self.assertNotEqual(after[f], before[f])
+            self.assertEqual(open(self.p.folder / (f + ".bak"), "rb").read(), before[f])
+        self.assertIn("{{CHANGED}}", open(self.p.mapping_path, encoding="utf-8").read())
+        self.assertEqual(json.load(open(self.p.mapping_path))["config"]["profile_name"], "COA v2")
+        self.assertFalse([x for x in os.listdir(self.p.folder) if x.endswith(".new")])
+
+    def test_bad_input_changes_nothing(self):
+        before = self._snapshot()
+        other = self.pm.create("Other")
+        for kwargs in ({"name": "Other", "mapping": self.m2},           # name taken -> files untouched
+                       {"mapping": self.m2, "template": self.d2},       # wrong extension for the template
+                       {"mapping": self.m2, "data": "/no/such.xlsx"}):  # missing source
+            with self.assertRaises(ProfileError):
+                self.pm.update(self.p.slug, **kwargs)
+            self.assertEqual(self._snapshot(), before)
+        self.assertEqual(self.pm.get(self.p.slug).name, "COA")
+
+    def test_choosing_the_profiles_own_file_is_a_no_op(self):
+        before = self._snapshot()
+        self.pm.update(self.p.slug, data=self.p.data_path, mapping=self.p.mapping_path)
+        self.assertEqual(self._snapshot(), before)
+        self.assertEqual(self._leftovers(), [])
+
+
 class TestExportImport(ProfileTestBase):
     def test_roundtrip(self):
         p = self.pm.create("COA", mapping=self.m, template=self.t, data=self.d)

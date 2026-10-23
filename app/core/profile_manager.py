@@ -295,28 +295,112 @@ class ProfileManager:
     # ------------------------------------------------------------------
 
     def replace_data(self, slug: str, src: str) -> None:
-        self._replace_file(slug, src, DATA_FILE, (".xlsx", ".xlsm"))
+        self.update(slug, data=src)
 
     def replace_template(self, slug: str, src: str) -> None:
-        self._replace_file(slug, src, TEMPLATE_FILE, (".docx",))
+        self.update(slug, template=src)
 
     def replace_mapping(self, slug: str, src: str) -> None:
-        profile = self.get(slug)
-        dest = profile.folder / MAPPING_FILE
-        if dest.is_file():
-            shutil.copy2(dest, str(dest) + ".bak")
-        self._install_mapping(dest, src, profile.name)
+        self.update(slug, mapping=src)
 
-    def _replace_file(self, slug: str, src: str, filename: str, extensions: tuple) -> None:
-        if Path(src).suffix.lower() not in extensions:
-            raise ProfileError(f"Expected a {' / '.join(extensions)} file.")
+    # ------------------------------------------------------------------
+    # Update: rename and/or replace files — all or nothing
+    # ------------------------------------------------------------------
+
+    _REPLACEABLE = (
+        ("mapping",  MAPPING_FILE,  (".json", ".xlsx")),
+        ("template", TEMPLATE_FILE, (".docx",)),
+        ("data",     DATA_FILE,     (".xlsx", ".xlsm")),
+    )
+
+    @staticmethod
+    def _locked_message(filename: str) -> str:
+        return (f"{filename} is open in another program (Word or Excel), so it cannot be replaced. "
+                f"Close it, then try again. Nothing was changed.")
+
+    @classmethod
+    def _assert_writable(cls, path: Path) -> None:
+        """Windows refuses to overwrite a file that is open in Word/Excel: detect it up front."""
+        if path.is_file():
+            try:
+                with open(path, "r+b"):
+                    pass
+            except OSError as exc:
+                raise ProfileError(cls._locked_message(path.name)) from exc
+
+    def update(self, slug: str, name: str | None = None, mapping: str | None = None,
+               template: str | None = None, data: str | None = None) -> Profile:
+        """
+        Rename the profile and/or replace its files (None / empty = keep).
+        All or nothing: every source is checked and staged, every target is checked for
+        locks (file open in Word/Excel) BEFORE anything changes, and if a step still fails
+        the files already replaced are put back. Replaced files are kept as '.bak'.
+        """
         profile = self.get(slug)
-        dest = profile.folder / filename
-        if Path(src).resolve() == dest.resolve():
-            return
-        if dest.is_file():
-            shutil.copy2(dest, str(dest) + ".bak")
-        self._copy_file(src, dest)
+        folder = profile.folder
+        sources = {"mapping": mapping, "template": template, "data": data}
+
+        new_name = None
+        if name is not None and name.strip() and name.strip() != profile.name:
+            new_name = self._check_name(name, ignore_slug=slug)
+
+        plan = []                                     # (kind, filename, src)
+        for kind, filename, extensions in self._REPLACEABLE:
+            src = sources[kind]
+            if not src:
+                continue
+            if not os.path.isfile(src):
+                raise ProfileError(f"File not found: {src}")
+            if Path(src).suffix.lower() not in extensions:
+                raise ProfileError(f"Expected a {' / '.join(extensions)} file for the {kind}.")
+            if (folder / filename).exists() and Path(src).resolve() == (folder / filename).resolve():
+                continue                              # that is already the profile's own file
+            plan.append((kind, filename, src))
+
+        staged: dict[str, Path] = {}
+        applied: list[tuple[Path, Path, bool]] = []
+        try:
+            for kind, filename, src in plan:          # 1. stage (cannot be blocked by a lock)
+                tmp = folder / (filename + ".new")
+                if kind == "mapping":
+                    self._install_mapping(tmp, src, new_name or profile.name)
+                else:
+                    shutil.copy2(src, tmp)
+                staged[filename] = tmp
+
+            for filename in staged:                   # 2. refuse early if a target is locked
+                self._assert_writable(folder / filename)
+                self._assert_writable(folder / (filename + ".bak"))
+
+            try:                                      # 3. swap in, remembering how to undo
+                for filename, tmp in staged.items():
+                    dest, bak = folder / filename, folder / (filename + ".bak")
+                    existed = dest.is_file()
+                    if existed:
+                        shutil.copy2(dest, bak)
+                    os.replace(tmp, dest)
+                    applied.append((dest, bak, existed))
+            except OSError as exc:
+                for dest, bak, existed in reversed(applied):
+                    try:
+                        if existed:
+                            shutil.copy2(bak, dest)
+                        else:
+                            dest.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                raise ProfileError(f"Could not replace {filename}: {exc}. "
+                                   "The previous files were restored.") from exc
+        finally:
+            for tmp in staged.values():
+                try:
+                    tmp.unlink(missing_ok=True)
+                except OSError:
+                    pass
+
+        if new_name:
+            return self.rename(slug, new_name)
+        return self.get(slug)
 
     # ------------------------------------------------------------------
     # Mapping install: copy as JSON, drop absolute paths, stamp profile name

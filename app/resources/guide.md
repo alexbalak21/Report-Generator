@@ -466,6 +466,7 @@ The check runs when you select a profile, after **Update…**, and with **⟳ Re
 | Nothing was written back into the Excel file | The file was open in Excel (locked), or the mapping has no report number | Close Excel; the write-back needs `sample_number` or `numero_rapport`. |
 | After a report, a formula column became empty | Saving by the app drops the saved results of formulas | Open the file in Excel and save it (5.3). |
 | The mapping edited outside the app is not taken into account | The window shows the previous state | Click **⟳ Refresh** (F5). |
+| **Update…** says `… is open in another program (Word or Excel)` | The profile's file is open (for example after clicking **📂 Data**), and Windows does not allow replacing an open file | Close Word/Excel, then Save again. Nothing was changed. If you already edited the profile's own file (opened with **📂**), you do not need **Update…**: save it, close it and press **⟳ Refresh**. |
 
 ## 11. A complete worked example
 
