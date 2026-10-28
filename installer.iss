@@ -1,13 +1,13 @@
 [Setup]
 AppId={{ED260038-C62C-41D8-BBEA-ED3E5F0D3787}}
 AppName=Report Generator
-AppVersion=1.1.1
+AppVersion=1.2.0
 AppPublisher=Your Name
 DefaultDirName={autopf}\ReportGenerator
 DefaultGroupName=Report Generator
 DisableProgramGroupPage=yes
 OutputDir=installer_output
-OutputBaseFilename=ReportGenerator-Setup-1.1.1
+OutputBaseFilename=ReportGenerator-Setup-1.2.0
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
