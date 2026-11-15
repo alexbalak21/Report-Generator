@@ -166,6 +166,22 @@ class MainWindow(tk.Tk):
                           ("📂 Data", self.excel_path)):
             ttk.Button(frame, text=text, width=12,
                        command=lambda v=var: self._open_file(v.get())).pack(side="left", padx=(0, 6))
+        self._files_menu = tk.Menu(self, tearoff=0)
+        for label, command in (
+            ("Open mapping 📂", lambda: self._open_file_location(self.mapping_path.get())),
+            ("Open template 📂", lambda: self._open_file_location(self.template_path.get())),
+            ("Open data 📂", lambda: self._open_file_location(self.excel_path.get())),
+        ):
+            self._files_menu.add_command(label=label, command=command)
+        self._files_menu_btn = ttk.Button(
+            frame, text="⋯", width=3, command=self._show_files_menu,
+        )
+        self._files_menu_btn.pack(side="left")
+
+    def _show_files_menu(self):
+        x = self._files_menu_btn.winfo_rootx()
+        y = self._files_menu_btn.winfo_rooty() + self._files_menu_btn.winfo_height()
+        self._files_menu.tk_popup(x, y)
 
     def _output_row(self):
         frame = ttk.Frame(self)
@@ -193,6 +209,18 @@ class MainWindow(tk.Tk):
             subprocess.Popen(["open", path])
         else:
             subprocess.Popen(["xdg-open", path])
+
+    def _open_file_location(self, path: str):
+        if not path or not os.path.exists(path):
+            messagebox.showwarning("Open location", "The selected file does not exist.")
+            return
+        directory = os.path.dirname(os.path.abspath(path))
+        if sys.platform == "win32":
+            subprocess.Popen(["explorer", f"/select,{os.path.abspath(path)}"])
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", directory])
+        else:
+            subprocess.Popen(["xdg-open", directory])
 
     def _on_report_name_changed(self, *_):
         if self._internal_report_name_update:
