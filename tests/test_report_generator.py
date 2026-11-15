@@ -309,5 +309,37 @@ class TestReportGenerator(unittest.TestCase):
         )
 
 
+    def test_resolve_output_path_when_date_column_is_also_mapped(self):
+        # Regression: a plain {"column": "date rapport"} mapping put the raw
+        # datetime into the computed values, which overrode the normalised
+        # "dd/mm/YYYY" string. excel_day_counter could not parse
+        # "2026-10-23 00:00:00", numero_rapport resolved to None and the Save As
+        # name fell back to report_row_N.docx.
+        from app.gui.report_actions import resolve_output_path
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Data"
+        ws.append(["date rapport", "numero echantillon"])
+        ws.append([datetime.datetime(2026, 10, 23), 7])
+        data_path = os.path.join(self.temp_dir, "dated.xlsx")
+        wb.save(data_path)
+
+        mapping = {
+            "config": {"data_sheet": "Data", "date_format": "%d/%m/%Y"},
+            "date rapport": {"column": "date rapport", "placeholder": "{{date_rapport}}"},
+            "numero echantillon": {"column": "numero echantillon", "placeholder": "{{n}}"},
+            "numero_rapport": {"operation": "excel_day_counter", "date_column": "date rapport",
+                               "sample_column": "numero echantillon", "date_format": "%d/%m/%Y"},
+            "file_name": {"name": "Rapport", "operation": "format",
+                          "format": "{name} {numero_rapport}.docx"},
+        }
+        mapping_path = os.path.join(self.temp_dir, "dated_mapping.json")
+        with open(mapping_path, "w", encoding="utf-8") as f:
+            json.dump(mapping, f)
+
+        _, name = resolve_output_path(mapping_path, data_path, self.template_path, 2)
+        self.assertEqual(name, "Rapport 261023-7.docx")
+
+
 if __name__ == "__main__":
     unittest.main()

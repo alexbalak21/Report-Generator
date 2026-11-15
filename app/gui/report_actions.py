@@ -108,7 +108,13 @@ def resolve_output_path(mapping_path: str, excel_path: str,
                 )
             except Exception:
                 pass
-            computed[key] = value
+            # Excel dates arrive as datetime objects. Left as-is they would
+            # override the already-normalised "dd/mm/YYYY" string in row_data
+            # (enriched = {**row_data, **computed}) and str(datetime) is
+            # "2026-10-23 00:00:00", which excel_day_counter cannot parse:
+            # numero_rapport then resolved to None and the file name fell back
+            # to report_row_N.docx.
+            computed[key] = gen._normalize_field_value(value, date_format)
 
         # Resolve all computed fields except file_name (single pass is enough here)
         for _ in range(len(rules) + 1):
